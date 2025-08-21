@@ -7,6 +7,13 @@ import EscapeRoomTab from "../tabs/EscapeRoomTab";
 import CodingRacesTab from "../tabs/CodingRacesTab";
 import AboutTab from "../tabs/AboutTab";
 
+// Define CustomTab interface
+interface CustomTab {
+  id: string;
+  name: string;
+  content: string;
+}
+
 type TabItem = {
   id: string;
   label: string;
@@ -14,6 +21,7 @@ type TabItem = {
 };
 
 const TAB_COOKIE = "selected-tab";
+const CUSTOM_TABS_STORAGE_KEY = "customTabs";
 
 function classNames(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
@@ -35,19 +43,50 @@ function setCookie(name: string, value: string, days: number = 365): void {
 }
 
 export default function Tabs(): JSX.Element {
-  const tabs: TabItem[] = useMemo(
-    () => [
-      { id: "tabs", label: "Tabs", content: <OverviewTab /> },
-      { id: "prelab", label: "Pre-lab Questions", content: <PrelabTab /> },
-      { id: "escape", label: "Escape Room", content: <EscapeRoomTab /> },
-      { id: "races", label: "Coding Races", content: <CodingRacesTab /> },
-      { id: "about", label: "About", content: <AboutTab /> },
-    ],
-    []
-  );
-
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [customTabs, setCustomTabs] = useState<CustomTab[]>([]);
+
+  // Load custom tabs from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(CUSTOM_TABS_STORAGE_KEY);
+    if (saved) {
+      try {
+        setCustomTabs(JSON.parse(saved));
+      } catch (error) {
+        console.error("Failed to parse saved tabs:", error);
+      }
+    }
+  }, []);
+
+  // Save custom tabs to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(CUSTOM_TABS_STORAGE_KEY, JSON.stringify(customTabs));
+  }, [customTabs]);
+
+  // Handle new tab creation
+  const handleNewTabCreated = useCallback((newTab: CustomTab) => {
+    setCustomTabs(prev => [...prev, newTab]);
+  }, []);
+
+  // Handle custom tab content update
+  const handleUpdateCustomTab = useCallback((updatedTab: CustomTab) => {
+    setCustomTabs(prev => prev.map(tab => tab.id === updatedTab.id ? updatedTab : tab));
+  }, []);
+
+  // Handle custom tab deletion
+  const handleDeleteCustomTab = useCallback((tabId: string) => {
+    setCustomTabs(prev => prev.filter(tab => tab.id !== tabId));
+  }, []);
+
+  // Create tabs array (only static tabs now)
+  const tabs: TabItem[] = useMemo(() => [
+    { id: "tabs", label: "Tabs", content: <OverviewTab onNewTabCreated={handleNewTabCreated} customTabs={customTabs} onDeleteCustomTab={handleDeleteCustomTab} onUpdateCustomTab={handleUpdateCustomTab} /> },
+    { id: "prelab", label: "Pre-lab Questions", content: <PrelabTab /> },
+    { id: "escape", label: "Escape Room", content: <EscapeRoomTab /> },
+    { id: "races", label: "Coding Races", content: <CodingRacesTab /> },
+    { id: "about", label: "About", content: <AboutTab /> },
+  ], [handleNewTabCreated, customTabs, handleDeleteCustomTab, handleUpdateCustomTab]);
 
   // Load saved tab from cookie on mount
   useEffect(() => {

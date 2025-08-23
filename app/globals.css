@@ -12,11 +12,11 @@ body {
 html[data-theme="light"] {
   --background: #ffffff;
   --foreground: #171717;
-  --header-bg: #f8f9fa;
+  --header-bg: #2196f3;
 }
 
 html[data-theme="dark"] {
   --background: #0a0a0a;
   --foreground: #ededed;
-  --header-bg: #1a1a1a;
+  --header-bg: #1565c0;
 }

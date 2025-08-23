@@ -24,13 +24,15 @@ export default function ThemeToggle() {
     if (initial === "dark") {
       root.style.setProperty('--background', '#0a0a0a');
       root.style.setProperty('--foreground', '#ededed');
-      root.style.setProperty('--header-bg', '#1a1a1a');
+      root.style.setProperty('--header-bg', '#1565c0');
       root.classList.add("dark");
+      console.log('Dark theme set, header-bg:', root.style.getPropertyValue('--header-bg'));
     } else {
       root.style.setProperty('--background', '#ffffff');
       root.style.setProperty('--foreground', '#171717');
-      root.style.setProperty('--header-bg', '#f8f9fa');
+      root.style.setProperty('--header-bg', '#2196f3');
       root.classList.remove("dark");
+      console.log('Light theme set, header-bg:', root.style.getPropertyValue('--header-bg'));
     }
   }, []);
 
@@ -44,13 +46,15 @@ export default function ThemeToggle() {
     if (next === "dark") {
       root.style.setProperty('--background', '#0a0a0a');
       root.style.setProperty('--foreground', '#ededed');
-      root.style.setProperty('--header-bg', '#1a1a1a');
+      root.style.setProperty('--header-bg', '#1565c0');
       root.classList.add("dark");
+      console.log('Dark theme toggled, header-bg:', root.style.getPropertyValue('--header-bg'));
     } else {
       root.style.setProperty('--background', '#ffffff');
       root.style.setProperty('--foreground', '#171717');
-      root.style.setProperty('--header-bg', '#f8f9fa');
+      root.style.setProperty('--header-bg', '#2196f3');
       root.classList.remove("dark");
+      console.log('Light theme toggled, header-bg:', root.style.getPropertyValue('--header-bg'));
     }
     
     const expires = new Date(Date.now() + 365 * 864e5).toUTCString();

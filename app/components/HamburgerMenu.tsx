@@ -2,7 +2,6 @@
 'use client'
 import { useState } from 'react';
 import styles from './HamburgerMenu.module.css';
-import ThemeToggle from './ThemeToggle';
 
 const HamburgerMenu = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,9 +18,6 @@ const HamburgerMenu = () => {
 
   return (
     <div className={styles.container}>
-      <div className={styles.toggleWrapper}>
-        <ThemeToggle />
-      </div>
       <div className={styles.hamburger} onClick={toggleMenu}>
         <div className={isOpen ? styles.barOpen : styles.bar}></div>
         <div className={isOpen ? styles.barOpen : styles.bar}></div>

@@ -4,6 +4,7 @@ export interface CustomTab {
   id: string;
   name: string;
   content: string;
+  generatedCode?: string;
 }
 
 const CUSTOM_TABS_STORAGE_KEY = "customTabs";

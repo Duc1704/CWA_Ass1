@@ -4,12 +4,14 @@ export interface GeneratedCode {
   fullCode: string;
 }
 
-export function useCodeGeneration() {
+export function useCodeGeneration(onCodeGenerated?: (tabId: string, generatedCode: string) => void) {
   const [generatedCode, setGeneratedCode] = useState<GeneratedCode | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingTabId, setGeneratingTabId] = useState<string | null>(null);
 
-  const generateCode = useCallback((content: string, title: string = "Generated Page") => {
+  const generateCode = useCallback((content: string, title: string = "Generated Page", tabId?: string) => {
     setIsGenerating(true);
+    setGeneratingTabId(tabId || null);
     
     // Simulate generation time
     setTimeout(() => {
@@ -19,9 +21,16 @@ export function useCodeGeneration() {
       setGeneratedCode({
         fullCode
       });
+      
+      // Notify parent component about generated code if callback provided
+      if (onCodeGenerated && tabId) {
+        onCodeGenerated(tabId, fullCode);
+      }
+      
       setIsGenerating(false);
+      setGeneratingTabId(null);
     }, 1000);
-  }, []);
+  }, [onCodeGenerated]);
 
   const clearGeneratedCode = useCallback(() => {
     setGeneratedCode(null);
@@ -40,6 +49,7 @@ export function useCodeGeneration() {
   return {
     generatedCode,
     isGenerating,
+    generatingTabId,
     generateCode,
     clearGeneratedCode,
     copyToClipboard
@@ -53,21 +63,8 @@ export function useCodeGeneration() {
 function generateJavaScript(): string {
   return `// Generated JavaScript
 document.addEventListener('DOMContentLoaded', function() {
-    // Add smooth scrolling to all links
-    const links = document.querySelectorAll('a[href^="#"]');
-    links.forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
-            if (target) {
-                target.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
-                });
-            }
-        });
-    });
-
+    console.log('Generated page loaded successfully!');
+    
     // Add fade-in animation to content
     const content = document.querySelector('main div');
     if (content) {
@@ -81,34 +78,64 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 300);
     }
 
-    // Add interactive hover effects
-    const paragraphs = document.querySelectorAll('main p');
-    paragraphs.forEach(p => {
-        p.addEventListener('mouseenter', function() {
-            this.style.transform = 'scale(1.02)';
-            this.style.transition = 'transform 0.2s ease';
-        });
-        
-        p.addEventListener('mouseleave', function() {
-            this.style.transform = 'scale(1)';
-        });
+
+
+
+
+    // Add smooth scroll to top button
+    const scrollTopBtn = document.createElement('button');
+    scrollTopBtn.innerHTML = '↑ Top';
+    scrollTopBtn.style.cssText = 'position: fixed; bottom: 20px; right: 20px; padding: 10px 15px; background: rgba(102, 126, 234, 0.9); color: white; border: none; border-radius: 25px; cursor: pointer; font-size: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); transition: all 0.3s ease; z-index: 1000;';
+    
+    scrollTopBtn.addEventListener('click', function() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     });
-
-    // Add click counter
-    let clickCount = 0;
-    const title = document.querySelector('h1');
-    if (title) {
-        title.addEventListener('click', function() {
-            clickCount++;
-            this.textContent = \`\${this.textContent} (Clicked \${clickCount}x)\`;
-        });
-    }
-
-    console.log('Generated page loaded successfully!');
+    
+    scrollTopBtn.addEventListener('mouseenter', function() {
+        this.style.background = 'rgba(102, 126, 234, 1)';
+        this.style.transform = 'translateY(-2px)';
+    });
+    
+    scrollTopBtn.addEventListener('mouseleave', function() {
+        this.style.background = 'rgba(102, 126, 234, 0.9)';
+        this.style.transform = 'translateY(0)';
+    });
+    
+    document.body.appendChild(scrollTopBtn);
+    
+    // Show/hide scroll button based on scroll position
+    window.addEventListener('scroll', function() {
+        if (window.pageYOffset > 300) {
+            scrollTopBtn.style.opacity = '1';
+            scrollTopBtn.style.visibility = 'visible';
+        } else {
+            scrollTopBtn.style.opacity = '0';
+            scrollTopBtn.style.visibility = 'hidden';
+        }
+    });
+    
+    // Initialize scroll button as hidden
+    scrollTopBtn.style.opacity = '0';
+    scrollTopBtn.style.visibility = 'hidden';
 });`;
 }
 
 function generateFullCodeWithInlineCSS(content: string, title: string, javascript: string): string {
+  // Process content - handle empty content and single lines properly
+  let processedContent = '';
+  if (content && content.trim()) {
+    const lines = content.split('\n').filter(line => line.trim());
+    if (lines.length > 0) {
+      processedContent = lines.map(line => 
+        `<p style="margin-bottom: 20px; color: #444; padding: 15px; background: rgba(255, 255, 255, 0.8); border-radius: 8px; border-left: 4px solid #667eea;">${line}</p>`
+      ).join('\n                ');
+    } else {
+      processedContent = `<p style="margin-bottom: 20px; color: #444; padding: 15px; background: rgba(255, 255, 255, 0.8); border-radius: 8px; border-left: 4px solid #667eea;">${content}</p>`;
+    }
+  } else {
+    processedContent = '<p style="margin-bottom: 20px; color: #666; font-style: italic; text-align: center;">No content provided</p>';
+  }
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -121,14 +148,11 @@ function generateFullCodeWithInlineCSS(content: string, title: string, javascrip
         <header style="text-align: center; margin-bottom: 40px; padding: 30px 0; background: rgba(255, 255, 255, 0.1); border-radius: 15px; backdrop-filter: blur(10px);">
             <h1 style="font-size: 2.5rem; color: white; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3); margin-bottom: 10px;">${title}</h1>
         </header>
-        <main style="background: rgba(255, 255, 255, 0.95); border-radius: 15px; padding: 40px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); margin-bottom: 30px;">
+        <main style="background: rgba(255, 255, 255, 0.95); border-radius: 15px; padding: 40px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);">
             <div style="font-size: 1.1rem; line-height: 1.8;">
-                ${content.split('\n').map(line => `<p style="margin-bottom: 20px; color: #444;">${line}</p>`).join('\n                ')}
+                ${processedContent}
             </div>
         </main>
-        <footer style="text-align: center; padding: 20px; background: rgba(255, 255, 255, 0.1); border-radius: 15px; backdrop-filter: blur(10px);">
-            <p style="color: white; font-size: 0.9rem;">&copy; 2024 Generated Page</p>
-        </footer>
     </div>
     <script>
 ${javascript}
@@ -136,3 +160,4 @@ ${javascript}
 </body>
 </html>`;
 }
+

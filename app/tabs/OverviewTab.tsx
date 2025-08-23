@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
-
-interface CustomTab {
-  id: string;
-  name: string;
-  content: string;
-}
+import React from "react";
+import { 
+  CustomTab, 
+  useTabForm, 
+  useTabContentEditing, 
+  useTabSelectionState,
+  useCodeGeneration
+} from "../hooks";
+import CodeOutput from "../components/CodeOutput";
 
 interface OverviewTabProps {
   onNewTabCreated: (newTab: CustomTab) => void;
@@ -15,106 +17,252 @@ interface OverviewTabProps {
   onUpdateCustomTab: (updatedTab: CustomTab) => void;
 }
 
-export default function OverviewTab({ onNewTabCreated, customTabs, onDeleteCustomTab, onUpdateCustomTab }: OverviewTabProps): JSX.Element {
-  const [newTabName, setNewTabName] = useState<string>("");
-  const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
-  const [selectedCustomTabId, setSelectedCustomTabId] = useState<string | null>(null);
-  const [editingTabId, setEditingTabId] = useState<string | null>(null);
-  const [editingContent, setEditingContent] = useState<string>("");
+// Sub-components
+interface CreateTabFormProps {
+  newTabName: string;
+  showCreateForm: boolean;
+  onNewTabNameChange: (name: string) => void;
+  onShowForm: () => void;
+  onHideForm: () => void;
+  onCreateTab: () => void;
+}
 
-  const handleCreateTab = () => {
-    if (newTabName.trim()) {
-      const newTab: CustomTab = {
-        id: `custom-${Date.now().toString()}`,
-        name: newTabName.trim(),
-        content: ""
-      };
-      onNewTabCreated(newTab);
-      setNewTabName("");
-      setShowCreateForm(false);
-    }
-  };
+const CreateTabForm: React.FC<CreateTabFormProps> = ({
+  newTabName,
+  showCreateForm,
+  onNewTabNameChange,
+  onShowForm,
+  onHideForm,
+  onCreateTab
+}) => (
+  <div className={`mb-8 overflow-hidden ${
+    showCreateForm 
+      ? 'border border-[--foreground]/20 rounded-lg bg-[--background] p-4 transition-all duration-300' 
+      : 'transition-none'
+  }`}>
+    {!showCreateForm ? (
+      <div className="inline-block border border-[--foreground]/20 rounded-lg bg-[--background] px-2 py-1">
+        <button
+          onClick={onShowForm}
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium text-sm whitespace-nowrap"
+        >
+          + Create New Tab
+        </button>
+      </div>
+    ) : (
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Create New Tab</h3>
+        <div className="flex gap-3 items-center">
+          <input
+            type="text"
+            value={newTabName}
+            onChange={(e) => onNewTabNameChange(e.target.value)}
+            placeholder="Enter tab name..."
+            className="flex-1 px-3 py-2 border border-[--foreground]/30 rounded-md bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onKeyPress={(e) => e.key === "Enter" && onCreateTab()}
+            autoFocus
+          />
+          <button
+            onClick={onCreateTab}
+            disabled={!newTabName.trim()}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Create Tab
+          </button>
+          <button
+            onClick={onHideForm}
+            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+);
 
-  const cancelCreateForm = () => {
-    setShowCreateForm(false);
-    setNewTabName("");
-  };
+interface TabHeaderProps {
+  tab: CustomTab;
+  isSelected: boolean;
+  onSelect: (tabId: string) => void;
+}
 
-  const handleEditContent = (tabId: string, content: string) => {
-    // Update the tab content through parent component
-    const updatedTab = customTabs.find(tab => tab.id === tabId);
-    if (updatedTab) {
-      onUpdateCustomTab({ ...updatedTab, content });
-    }
-  };
+const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect }) => (
+  <button
+    key={tab.id}
+    onClick={() => onSelect(tab.id)}
+    className={`px-3 py-2 rounded-md border transition-colors ${
+      isSelected
+        ? 'bg-blue-600 text-white border-blue-600'
+        : 'bg-[--background] text-[--foreground] border-[--foreground]/30 hover:border-[--foreground]/50'
+    }`}
+  >
+    {tab.name}
+  </button>
+);
 
-  const startEditing = (tab: CustomTab) => {
-    setEditingTabId(tab.id);
-    setEditingContent(tab.content);
-  };
+interface TabContentProps {
+  tab: CustomTab;
+  isEditing: boolean;
+  editingContent: string;
+  onEditContentChange: (content: string) => void;
+  onStartEditing: () => void;
+  onSaveContent: () => void;
+  onCancelEditing: () => void;
+  onDeleteTab: () => void;
+  onGenerateCode: (content: string, title: string) => void;
+  isGenerating: boolean;
+}
 
-  const saveContent = () => {
-    if (editingTabId) {
-      handleEditContent(editingTabId, editingContent);
-      setEditingTabId(null);
-      setEditingContent("");
-    }
-  };
-
-  const cancelEditing = () => {
-    setEditingTabId(null);
-    setEditingContent("");
-  };
-
-  return (
-    <div id="tabs" className="text-[--foreground] p-6">
-      <h2 className="text-2xl font-bold mb-6">Custom Tab Creator</h2>
-      
-      {/* Create New Tab Section */}
-      <div className={`mb-8 overflow-hidden ${
-        showCreateForm 
-          ? 'border border-[--foreground]/20 rounded-lg bg-[--background] p-4 transition-all duration-300' 
-          : 'transition-none'
-      }`}>
-        {!showCreateForm ? (
-          <div className="inline-block border border-[--foreground]/20 rounded-lg bg-[--background] px-2 py-1">
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium text-sm whitespace-nowrap"
-            >
-              + Create New Tab
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Create New Tab</h3>
-            <div className="flex gap-3 items-center">
+const TabContent: React.FC<TabContentProps> = ({
+  tab,
+  isEditing,
+  editingContent,
+  onEditContentChange,
+  onStartEditing,
+  onSaveContent,
+  onCancelEditing,
+  onDeleteTab,
+  onGenerateCode,
+  isGenerating
+}) => (
+  <div className="border border-[--foreground]/20 rounded-lg p-4 bg-[--background]">
+    <div className="flex justify-between items-center mb-4">
+      <h4 className="text-lg font-medium">{tab.name}</h4>
+      <div className="flex gap-2">
+        <button
+          onClick={onStartEditing}
+          className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+        >
+          Edit Content
+        </button>
+        <button
+          onClick={onDeleteTab}
+          className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+    
+    {isEditing ? (
+      <div className="space-y-3">
+        <textarea
+          value={editingContent}
+          onChange={(e) => onEditContentChange(e.target.value)}
+          placeholder="Enter tab content..."
+          rows={6}
+          className="w-full px-3 py-2 border border-[--foreground]/30 rounded-md bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500 resize-vertical"
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={onSaveContent}
+            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+          >
+            Save
+          </button>
+          <button
+            onClick={onCancelEditing}
+            className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="space-y-4">
+        <div className="min-h-[120px] p-3 bg-[--foreground]/5 rounded border border-[--foreground]/10">
+          {tab.content ? (
+            <p className="whitespace-pre-wrap">{tab.content}</p>
+          ) : (
+            <p className="text-[--foreground]/60 italic">No content yet. Click &quot;Edit Content&quot; to add some!</p>
+          )}
+        </div>
+        
+        {/* Code Generation Section */}
+        {tab.content && (
+          <div className="border border-[--foreground]/20 rounded-lg p-4 bg-[--foreground]/5">
+            <h4 className="text-lg font-medium mb-3 text-[--foreground]">Generate Code</h4>
+            <div className="space-y-3">
               <input
                 type="text"
-                value={newTabName}
-                onChange={(e) => setNewTabName(e.target.value)}
-                placeholder="Enter tab name..."
-                className="flex-1 px-3 py-2 border border-[--foreground]/30 rounded-md bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyPress={(e) => e.key === "Enter" && handleCreateTab()}
-                autoFocus
+                placeholder="Enter page title (optional)"
+                className="w-full px-3 py-2 border border-[--foreground]/30 rounded-md bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id={`title-${tab.id}`}
               />
               <button
-                onClick={handleCreateTab}
-                disabled={!newTabName.trim()}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                onClick={() => {
+                  const titleInput = document.getElementById(`title-${tab.id}`) as HTMLInputElement;
+                  const title = titleInput?.value || tab.name;
+                  onGenerateCode(tab.content, title);
+                }}
+                disabled={isGenerating}
+                className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
-                Create Tab
-              </button>
-              <button
-                onClick={cancelCreateForm}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
-              >
-                Cancel
+                {isGenerating ? "🔄 Generating..." : "🚀 Generate HTML + CSS + JS"}
               </button>
             </div>
           </div>
         )}
       </div>
+    )}
+  </div>
+);
+
+export default function OverviewTab({ 
+  onNewTabCreated, 
+  customTabs, 
+  onDeleteCustomTab, 
+  onUpdateCustomTab
+}: OverviewTabProps): JSX.Element {
+  // Custom hooks
+  const {
+    newTabName,
+    showCreateForm,
+    handleCreateTab,
+    showForm,
+    hideForm,
+    updateTabName
+  } = useTabForm(onNewTabCreated);
+
+  const {
+    editingTabId,
+    editingContent,
+    startEditing,
+    saveContent,
+    cancelEditing,
+    updateEditingContent
+  } = useTabContentEditing(onUpdateCustomTab);
+
+  const {
+    selectedCustomTabId,
+    selectTab
+  } = useTabSelectionState();
+
+  // Code generation
+  const {
+    generatedCode,
+    isGenerating,
+    generateCode,
+    clearGeneratedCode,
+    copyToClipboard
+  } = useCodeGeneration();
+
+  return (
+    <div id="tabs" className="text-[--foreground] p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">Custom Tab Creator</h2>
+      </div>
+      
+      {/* Create New Tab Form */}
+      <CreateTabForm
+        newTabName={newTabName}
+        showCreateForm={showCreateForm}
+        onNewTabNameChange={updateTabName}
+        onShowForm={showForm}
+        onHideForm={hideForm}
+        onCreateTab={handleCreateTab}
+      />
 
       {/* Custom Tabs Display */}
       {customTabs.length > 0 && (
@@ -124,85 +272,35 @@ export default function OverviewTab({ onNewTabCreated, customTabs, onDeleteCusto
           {/* Tab Headers */}
           <div className="flex gap-2 mb-4 flex-wrap">
             {customTabs.map((tab) => (
-              <button
+              <TabHeader
                 key={tab.id}
-                onClick={() => setSelectedCustomTabId(selectedCustomTabId === tab.id ? null : tab.id)}
-                className={`px-3 py-2 rounded-md border transition-colors ${
-                  selectedCustomTabId === tab.id
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-[--background] text-[--foreground] border-[--foreground]/30 hover:border-[--foreground]/50'
-                }`}
-              >
-                {tab.name}
-              </button>
+                tab={tab}
+                isSelected={selectedCustomTabId === tab.id}
+                onSelect={selectTab}
+              />
             ))}
           </div>
 
           {/* Content Area */}
-          {selectedCustomTabId && (
-            <div className="border border-[--foreground]/20 rounded-lg p-4 bg-[--background]">
-              {(() => {
-                const selectedTab = customTabs.find(tab => tab.id === selectedCustomTabId);
-                if (!selectedTab) return null;
-                
-                return (
-                  <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="text-lg font-medium">{selectedTab.name}</h4>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => startEditing(selectedTab)}
-                          className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                        >
-                          Edit Content
-                        </button>
-                        <button
-                          onClick={() => onDeleteCustomTab(selectedTab.id)}
-                          className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {editingTabId === selectedTab.id ? (
-                      <div className="space-y-3">
-                        <textarea
-                          value={editingContent}
-                          onChange={(e) => setEditingContent(e.target.value)}
-                          placeholder="Enter tab content..."
-                          rows={6}
-                          className="w-full px-3 py-2 border border-[--foreground]/30 rounded-md bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500 resize-vertical"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={saveContent}
-                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={cancelEditing}
-                            className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="min-h-[120px] p-3 bg-[--foreground]/5 rounded border border-[--foreground]/10">
-                        {selectedTab.content ? (
-                          <p className="whitespace-pre-wrap">{selectedTab.content}</p>
-                        ) : (
-                          <p className="text-[--foreground]/60 italic">No content yet. Click &quot;Edit Content&quot; to add some!</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+          {selectedCustomTabId && (() => {
+            const selectedTab = customTabs.find(tab => tab.id === selectedCustomTabId);
+            if (!selectedTab) return null;
+            
+            return (
+              <TabContent
+                tab={selectedTab}
+                isEditing={editingTabId === selectedTab.id}
+                editingContent={editingContent}
+                onEditContentChange={updateEditingContent}
+                onStartEditing={() => startEditing(selectedTab)}
+                onSaveContent={() => saveContent(selectedTab)}
+                onCancelEditing={cancelEditing}
+                onDeleteTab={() => onDeleteCustomTab(selectedTab.id)}
+                onGenerateCode={generateCode}
+                isGenerating={isGenerating}
+              />
+            );
+          })()}
         </div>
       )}
 
@@ -211,6 +309,15 @@ export default function OverviewTab({ onNewTabCreated, customTabs, onDeleteCusto
           <p className="text-lg">No custom tabs created yet.</p>
           <p className="text-sm">Create your first tab above!</p>
         </div>
+      )}
+
+      {/* Generated Code Output */}
+      {generatedCode && (
+        <CodeOutput
+          generatedCode={generatedCode}
+          onClear={clearGeneratedCode}
+          onCopy={copyToClipboard}
+        />
       )}
     </div>
   );

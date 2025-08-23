@@ -88,9 +88,11 @@ interface TabHeaderProps {
   onSaveName: (tabId: string, newName: string) => void;
   onCancelRenaming: (tabId: string) => void;
   showRenameButtons: boolean;
+  showDeleteButtons: boolean;
+  onDeleteTab: (tabId: string) => void;
 }
 
-const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStartRenaming, onSaveName, onCancelRenaming, showRenameButtons }) => {
+const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStartRenaming, onSaveName, onCancelRenaming, showRenameButtons, showDeleteButtons, onDeleteTab }) => {
   const [editName, setEditName] = useState(tab.name);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -159,6 +161,18 @@ const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStar
           Edit
         </Button>
       )}
+      
+      {/* Delete button - only shows when global toggle is active */}
+      {showDeleteButtons && (
+        <Button
+          onClick={() => onDeleteTab(tab.id)}
+          variant="danger"
+          size="sm"
+          title="Delete Tab"
+        >
+          Delete
+        </Button>
+      )}
     </div>
   );
 };
@@ -171,7 +185,6 @@ interface TabContentProps {
   onStartEditing: () => void;
   onSaveContent: () => void;
   onCancelEditing: () => void;
-  onDeleteTab: () => void;
 }
 
 const TabContent: React.FC<TabContentProps> = ({
@@ -181,71 +194,61 @@ const TabContent: React.FC<TabContentProps> = ({
   onEditContentChange,
   onStartEditing,
   onSaveContent,
-  onCancelEditing,
-  onDeleteTab
+  onCancelEditing
 }) => {
   // Show editing mode if actively editing OR if tab has no content (new tab)
   const shouldShowEditMode = isEditing || !tab.content;
   
   return (
-    <div className="border border-[--foreground]/20 rounded-lg p-4 bg-[--background]">
-      <div className="flex justify-between items-center mb-4">
-        <h4 className="text-lg font-medium">{tab.name}</h4>
-        <div className="flex gap-2">
-          {tab.content && !isEditing && (
-            <button
-              onClick={onStartEditing}
-              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-            >
-              Edit Content
-            </button>
-          )}
-          <button
-            onClick={onDeleteTab}
-            className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+    <div className="border border-[--foreground]/20 rounded-b-lg rounded-tr-lg p-6 bg-[--background] shadow-sm">
+      {/* Action buttons at the top right */}
+      <div className="flex justify-end gap-2 mb-4">
+        {tab.content && !isEditing && (
+          <Button
+            onClick={onStartEditing}
+            variant="success"
+            size="sm"
           >
-            Delete
-          </button>
-        </div>
+            Edit Content
+          </Button>
+        )}
       </div>
       
       {shouldShowEditMode ? (
-      <div className="space-y-3">
-        <textarea
-          value={editingContent}
-          onChange={(e) => onEditContentChange(e.target.value)}
-          placeholder="Enter tab content..."
-          rows={6}
-          className="w-full px-3 py-2 border border-[--foreground]/30 rounded-md bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500 resize-vertical"
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={onSaveContent}
-            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-          >
-            Save
-          </button>
-          <button
-            onClick={onCancelEditing}
-            className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-          >
-            Cancel
-          </button>
+        <div className="space-y-4">
+          <textarea
+            value={editingContent}
+            onChange={(e) => onEditContentChange(e.target.value)}
+            placeholder="Enter your content here..."
+            rows={8}
+            className="w-full px-4 py-3 border border-[--foreground]/30 rounded-md bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500 resize-vertical text-sm"
+          />
+          <div className="flex gap-3">
+            <Button
+              onClick={onSaveContent}
+              variant="success"
+              size="sm"
+            >
+              Save
+            </Button>
+            <Button
+              onClick={onCancelEditing}
+              variant="secondary"
+              size="sm"
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
-      </div>
-    ) : (
-      <div className="space-y-4">
-        <div className="min-h-[120px] p-3 bg-[--foreground]/5 rounded border border-[--foreground]/10">
+      ) : (
+        <div className="min-h-[120px] p-4 bg-[--foreground]/5 rounded border border-[--foreground]/10">
           {tab.content ? (
-            <p className="whitespace-pre-wrap">{tab.content}</p>
+            <p className="whitespace-pre-wrap text-[--foreground]">{tab.content}</p>
           ) : (
             <p className="text-[--foreground]/60 italic">No content yet. Click &quot;Edit Content&quot; to add some!</p>
           )}
         </div>
-        
-
-      </div>
-    )}
+      )}
     </div>
   );
 };
@@ -261,6 +264,7 @@ export default function OverviewTab({
 }: OverviewTabProps): JSX.Element {
   // State to control when rename buttons are visible
   const [showRenameButtons, setShowRenameButtons] = useState(false);
+  const [showDeleteButtons, setShowDeleteButtons] = useState(false);
 
   // Custom hooks
   const {
@@ -343,7 +347,18 @@ export default function OverviewTab({
             variant={showRenameButtons ? "warning" : "secondary"}
             title={showRenameButtons ? "Hide edit buttons" : "Show edit buttons"}
           >
-            {showRenameButtons ? "Hide Edit" : "Show Edit"}
+            {showRenameButtons ? "Edit Tab Heading" : "Edit Tab Heading"}
+          </Button>
+        )}
+        
+        {/* Toggle Delete Buttons */}
+        {customTabs.length > 0 && (
+          <Button
+            onClick={() => setShowDeleteButtons(!showDeleteButtons)}
+            variant={showDeleteButtons ? "danger" : "secondary"}
+            title={showDeleteButtons ? "Hide delete buttons" : "Show delete buttons"}
+          >
+            {showDeleteButtons ? "Delete Tab" : "Delete Tab"}
           </Button>
         )}
         
@@ -355,7 +370,7 @@ export default function OverviewTab({
             variant="primary"
             className="bg-purple-600 hover:bg-purple-700"
           >
-            {isGenerating ? "Generating..." : "Generate All Tabs Code"}
+            {isGenerating ? "Generating..." : "Generate Code"}
           </Button>
         )}
       </div>
@@ -377,6 +392,8 @@ export default function OverviewTab({
                 onSaveName={onSaveTabName}
                 onCancelRenaming={onCancelRenamingTab}
                 showRenameButtons={showRenameButtons}
+                showDeleteButtons={showDeleteButtons}
+                onDeleteTab={onDeleteCustomTab}
               />
             ))}
           </div>
@@ -395,7 +412,6 @@ export default function OverviewTab({
                 onStartEditing={() => startEditing(selectedTab)}
                 onSaveContent={() => saveContent(selectedTab)}
                 onCancelEditing={cancelEditing}
-                onDeleteTab={() => onDeleteCustomTab(selectedTab.id)}
               />
             );
           })()}

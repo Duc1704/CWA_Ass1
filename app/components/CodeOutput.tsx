@@ -50,7 +50,7 @@ export default function CodeOutput({ generatedCode, onClear, onCopy }: CodeOutpu
         <CopyToClipboard
           code={generatedCode.fullCode}
           onCopy={onCopy}
-          buttonText="Copy Full Code to Clipboard"
+          buttonText="Copy to Clipboard"
           variant="success"
           size="lg"
           className="px-6 py-3"

@@ -1,13 +1,13 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { STUDENT_NUMBER } from "./constants";
 
 export const metadata: Metadata = {
   title: "Title",
   description: "Accessible Next.js starter with tabs, dark mode, cookies",
 };
 
-export const STUDENT_NAME = "Minh Duc Dang";
-export const STUDENT_NUMBER = "22480348";
+
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -22,11 +22,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {STUDENT_NUMBER}
           </span>
         </div>
-        {/* <Header studentNumber={STUDENT_NUMBER} /> */}
+
         <main id="main" className="container min-h-screen bg-[--background] text-[--foreground] transition-colors" role="main">
           {children}
         </main>
-        {/* <Footer studentName={STUDENT_NAME} studentNumber={STUDENT_NUMBER} /> */}
+       
       </body>
     </html>
   );

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { GeneratedCode } from "../hooks/useCodeGeneration";
+import CopyToClipboard from "./overViewTabButton/CopyToClipboard";
 
 interface CodeOutputProps {
   generatedCode: GeneratedCode;
@@ -10,18 +11,6 @@ interface CodeOutputProps {
 }
 
 export default function CodeOutput({ generatedCode, onClear, onCopy }: CodeOutputProps): JSX.Element {
-  const [copyStatus, setCopyStatus] = useState<string>('');
-
-  const handleCopy = async (code: string, type: string) => {
-    const success = await onCopy(code);
-    if (success) {
-      setCopyStatus(`${type} copied to clipboard!`);
-      setTimeout(() => setCopyStatus(''), 2000);
-    } else {
-      setCopyStatus('Failed to copy to clipboard');
-      setTimeout(() => setCopyStatus(''), 2000);
-    }
-  };
 
   return (
     <div className="bg-[--background] border border-[--foreground]/20 rounded-lg p-6 mb-6">
@@ -39,37 +28,33 @@ export default function CodeOutput({ generatedCode, onClear, onCopy }: CodeOutpu
       <div className="bg-gray-900 rounded-lg p-4 mb-4 overflow-x-auto">
         <div className="flex justify-between items-center mb-2">
           <span className="text-gray-300 text-sm font-medium">Full HTML Code</span>
-          <button
-            onClick={() => handleCopy(generatedCode.fullCode, 'Full Code')}
-            className="px-3 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition-colors"
-          >
-            Copy Code
-          </button>
+          <CopyToClipboard
+            code={generatedCode.fullCode}
+            onCopy={onCopy}
+            buttonText="Copy Code"
+            variant="secondary"
+            size="sm"
+            className="bg-gray-700 text-gray-300 hover:bg-gray-600"
+            showStatus={false}
+          />
         </div>
         <pre className="text-gray-100 text-sm leading-relaxed">
           <code>{generatedCode.fullCode}</code>
         </pre>
       </div>
 
-      {/* Copy Status */}
-      {copyStatus && (
-        <div className={`text-center p-2 rounded-md text-sm ${
-          copyStatus.includes('Failed') 
-            ? 'bg-red-100 text-red-700' 
-            : 'bg-green-100 text-green-700'
-        }`}>
-          {copyStatus}
-        </div>
-      )}
 
-      {/* Download Button */}
+
+      {/* Copy Button */}
       <div className="flex justify-center">
-        <button
-          onClick={() => handleCopy(generatedCode.fullCode, 'Full Code')}
-          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-        >
-          📋 Copy Full Code to Clipboard
-        </button>
+        <CopyToClipboard
+          code={generatedCode.fullCode}
+          onCopy={onCopy}
+          buttonText="Copy Full Code to Clipboard"
+          variant="success"
+          size="lg"
+          className="px-6 py-3"
+        />
       </div>
     </div>
   );

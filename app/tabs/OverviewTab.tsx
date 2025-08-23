@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { 
   CustomTab, 
   useTabForm, 
@@ -15,6 +15,9 @@ interface OverviewTabProps {
   customTabs: CustomTab[];
   onDeleteCustomTab: (tabId: string) => void;
   onUpdateCustomTab: (updatedTab: CustomTab) => void;
+  onStartRenamingTab: (tabId: string) => void;
+  onSaveTabName: (tabId: string, newName: string) => void;
+  onCancelRenamingTab: (tabId: string) => void;
 }
 
 // Sub-components
@@ -85,21 +88,76 @@ interface TabHeaderProps {
   tab: CustomTab;
   isSelected: boolean;
   onSelect: (tabId: string) => void;
+  onStartRenaming: (tabId: string) => void;
+  onSaveName: (tabId: string, newName: string) => void;
+  onCancelRenaming: (tabId: string) => void;
 }
 
-const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect }) => (
-  <button
-    key={tab.id}
-    onClick={() => onSelect(tab.id)}
-    className={`px-3 py-2 rounded-md border transition-colors ${
-      isSelected
-        ? 'bg-blue-600 text-white border-blue-600'
-        : 'bg-[--background] text-[--foreground] border-[--foreground]/30 hover:border-[--foreground]/50'
-    }`}
-  >
-    {tab.name}
-  </button>
-);
+const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStartRenaming, onSaveName, onCancelRenaming }) => {
+  const [editName, setEditName] = useState(tab.name);
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      onSaveName(tab.id, editName);
+    } else if (e.key === 'Escape') {
+      onCancelRenaming(tab.id);
+      setEditName(tab.name);
+    }
+  };
+
+  if (tab.isRenaming) {
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onKeyDown={handleKeyPress}
+          onBlur={() => onSaveName(tab.id, editName)}
+          className="px-3 py-2 rounded-md border border-blue-500 bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          autoFocus
+        />
+        <button
+          onClick={() => onSaveName(tab.id, editName)}
+          className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+        >
+          ✓
+        </button>
+        <button
+          onClick={() => {
+            onCancelRenaming(tab.id);
+            setEditName(tab.name);
+          }}
+          className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-colors"
+        >
+          ✕
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => onSelect(tab.id)}
+        className={`px-3 py-2 rounded-md border transition-colors ${
+          isSelected
+            ? 'bg-blue-600 text-white border-blue-600'
+            : 'bg-[--background] text-[--foreground] border-[--foreground]/30 hover:border-[--foreground]/50'
+        }`}
+      >
+        {tab.name}
+      </button>
+      <button
+        onClick={() => onStartRenaming(tab.id)}
+        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+        title="Rename tab"
+      >
+        ✏️
+      </button>
+    </div>
+  );
+};
 
 interface TabContentProps {
   tab: CustomTab;
@@ -110,9 +168,6 @@ interface TabContentProps {
   onSaveContent: () => void;
   onCancelEditing: () => void;
   onDeleteTab: () => void;
-  onGenerateCode: (content: string, title: string, tabId: string) => void;
-  isGenerating: boolean;
-  generatingTabId: string | null;
 }
 
 const TabContent: React.FC<TabContentProps> = ({
@@ -123,10 +178,7 @@ const TabContent: React.FC<TabContentProps> = ({
   onStartEditing,
   onSaveContent,
   onCancelEditing,
-  onDeleteTab,
-  onGenerateCode,
-  isGenerating,
-  generatingTabId
+  onDeleteTab
 }) => {
   // Show editing mode if actively editing OR if tab has no content (new tab)
   const shouldShowEditMode = isEditing || !tab.content;
@@ -187,24 +239,7 @@ const TabContent: React.FC<TabContentProps> = ({
           )}
         </div>
         
-        {/* Code Generation Section */}
-        {tab.content && (
-          <div className="border border-[--foreground]/20 rounded-lg p-4 bg-[--foreground]/5">
-            <h4 className="text-lg font-medium mb-3 text-[--foreground]">Generate Code</h4>
-            <div className="space-y-3">
-              <p className="text-sm text-[--foreground]/70 mb-2">
-                Page title will be: <strong>{tab.name}</strong>
-              </p>
-              <button
-                onClick={() => onGenerateCode(tab.content, tab.name, tab.id)}
-                disabled={isGenerating && generatingTabId === tab.id}
-                className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                {(isGenerating && generatingTabId === tab.id) ? "🔄 Generating..." : "🚀 Generate HTML + CSS + JS"}
-              </button>
-            </div>
-          </div>
-        )}
+
       </div>
     )}
     </div>
@@ -215,7 +250,10 @@ export default function OverviewTab({
   onNewTabCreated, 
   customTabs, 
   onDeleteCustomTab, 
-  onUpdateCustomTab
+  onUpdateCustomTab,
+  onStartRenamingTab,
+  onSaveTabName,
+  onCancelRenamingTab
 }: OverviewTabProps): JSX.Element {
   // Custom hooks
   const {
@@ -248,9 +286,10 @@ export default function OverviewTab({
 
   // Code generation - handle per-tab generated code
   const {
+    generatedCode,
     isGenerating,
-    generatingTabId,
     generateCode,
+    clearGeneratedCode,
     copyToClipboard
   } = useCodeGeneration((tabId, code) => {
     // Save generated code to the specific tab
@@ -260,21 +299,47 @@ export default function OverviewTab({
     }
   });
 
+  // Generate code for all tabs
+  const generateAllTabsCode = () => {
+    if (customTabs.length > 0) {
+      const allTabsContent = customTabs.map(tab => ({
+        name: tab.name,
+        content: tab.content || 'No content'
+      }));
+      
+      // Generate code with all tabs information
+      generateCode(JSON.stringify(allTabsContent, null, 2), 'Custom Tabs Collection');
+    }
+  };
+
   return (
     <div id="tabs" className="text-[--foreground] p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Custom Tab Creator</h2>
       </div>
       
-      {/* Create New Tab Form */}
-      <CreateTabForm
-        newTabName={newTabName}
-        showCreateForm={showCreateForm}
-        onNewTabNameChange={updateTabName}
-        onShowForm={showForm}
-        onHideForm={hideForm}
-        onCreateTab={handleCreateTab}
-      />
+      {/* Create New Tab Form and Generate Code Button */}
+      <div className="flex items-center gap-4 mb-8">
+        <CreateTabForm
+          newTabName={newTabName}
+          showCreateForm={showCreateForm}
+          onNewTabNameChange={updateTabName}
+          onShowForm={showForm}
+          onHideForm={hideForm}
+          onCreateTab={handleCreateTab}
+        />
+        
+        {/* Common Generate Code Button */}
+        {customTabs.length > 0 && (
+          <button
+            onClick={() => generateAllTabsCode()}
+            disabled={isGenerating}
+            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+          >
+            {isGenerating ? "🔄 Generating..." : "🚀 Generate All Tabs Code"}
+          </button>
+        )}
+      </div>
 
       {/* Custom Tabs Display */}
       {customTabs.length > 0 && (
@@ -289,6 +354,9 @@ export default function OverviewTab({
                 tab={tab}
                 isSelected={selectedCustomTabId === tab.id}
                 onSelect={selectTab}
+                onStartRenaming={onStartRenamingTab}
+                onSaveName={onSaveTabName}
+                onCancelRenaming={onCancelRenamingTab}
               />
             ))}
           </div>
@@ -308,9 +376,6 @@ export default function OverviewTab({
                 onSaveContent={() => saveContent(selectedTab)}
                 onCancelEditing={cancelEditing}
                 onDeleteTab={() => onDeleteCustomTab(selectedTab.id)}
-                onGenerateCode={generateCode}
-                isGenerating={isGenerating}
-                generatingTabId={generatingTabId}
               />
             );
           })()}
@@ -324,23 +389,17 @@ export default function OverviewTab({
         </div>
       )}
 
-      {/* Generated Code Output - Show code for currently selected tab */}
-      {selectedCustomTabId && (() => {
-        const selectedTab = customTabs.find(tab => tab.id === selectedCustomTabId);
-        if (selectedTab?.generatedCode) {
-          return (
-            <CodeOutput
-              generatedCode={{ fullCode: selectedTab.generatedCode }}
-              onClear={() => {
-                // Clear generated code for this specific tab
-                onUpdateCustomTab({ ...selectedTab, generatedCode: undefined });
-              }}
-              onCopy={copyToClipboard}
-            />
-          );
-        }
-        return null;
-      })()}
+      {/* Generated Code Output - Show below custom tabs */}
+      {generatedCode && (
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-4 text-[--foreground]">Generated Code</h3>
+          <CodeOutput
+            generatedCode={generatedCode}
+            onClear={clearGeneratedCode}
+            onCopy={copyToClipboard}
+          />
+        </div>
+      )}
     </div>
   );
 }

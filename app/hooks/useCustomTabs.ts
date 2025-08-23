@@ -5,6 +5,7 @@ export interface CustomTab {
   name: string;
   content: string;
   generatedCode?: string;
+  isRenaming?: boolean;
 }
 
 const CUSTOM_TABS_STORAGE_KEY = "customTabs";
@@ -41,10 +42,34 @@ export function useCustomTabs() {
     setCustomTabs(prev => prev.filter(tab => tab.id !== tabId));
   }, []);
 
+  // Rename tab
+  const startRenamingTab = useCallback((tabId: string) => {
+    setCustomTabs(prev => prev.map(tab => 
+      tab.id === tabId ? { ...tab, isRenaming: true } : tab
+    ));
+  }, []);
+
+  const saveTabName = useCallback((tabId: string, newName: string) => {
+    if (newName.trim()) {
+      setCustomTabs(prev => prev.map(tab => 
+        tab.id === tabId ? { ...tab, name: newName.trim(), isRenaming: false } : tab
+      ));
+    }
+  }, []);
+
+  const cancelRenamingTab = useCallback((tabId: string) => {
+    setCustomTabs(prev => prev.map(tab => 
+      tab.id === tabId ? { ...tab, isRenaming: false } : tab
+    ));
+  }, []);
+
   return {
     customTabs,
     addCustomTab,
     updateCustomTab,
-    deleteCustomTab
+    deleteCustomTab,
+    startRenamingTab,
+    saveTabName,
+    cancelRenamingTab
   };
 }

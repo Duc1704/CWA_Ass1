@@ -65,6 +65,45 @@ function generateJavaScript(): string {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Generated page loaded successfully!');
     
+    // Tab switching functionality
+    window.switchTab = function(tabIndex) {
+        // Hide all tab contents
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabContents.forEach(content => {
+            content.style.display = 'none';
+            content.style.opacity = '0';
+            content.style.transform = 'translateY(10px)';
+        });
+        
+        // Remove active state from all tab buttons
+        const tabButtons = document.querySelectorAll('.tab-button');
+        tabButtons.forEach(button => {
+            button.style.background = '#f0f0f0';
+            button.style.color = '#333';
+            button.style.fontWeight = 'normal';
+            button.style.transform = 'translateY(0)';
+        });
+        
+        // Show selected tab content with animation
+        const selectedContent = document.getElementById('tab-' + tabIndex);
+        if (selectedContent) {
+            selectedContent.style.display = 'block';
+            setTimeout(() => {
+                selectedContent.style.opacity = '1';
+                selectedContent.style.transform = 'translateY(0)';
+            }, 50);
+        }
+        
+        // Highlight selected tab button with animation
+        const selectedButton = document.querySelector('[data-tab="' + tabIndex + '"]');
+        if (selectedButton) {
+            selectedButton.style.background = '#667eea';
+            selectedButton.style.color = 'white';
+            selectedButton.style.fontWeight = 'bold';
+            selectedButton.style.transform = 'translateY(-2px)';
+        }
+    };
+    
     // Add fade-in animation to content
     const content = document.querySelector('main div');
     if (content) {
@@ -121,19 +160,68 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 function generateFullCodeWithInlineCSS(content: string, title: string, javascript: string): string {
-  // Process content - handle empty content and single lines properly
-  let processedContent = '';
-  if (content && content.trim()) {
-    const lines = content.split('\n').filter(line => line.trim());
-    if (lines.length > 0) {
-      processedContent = lines.map(line => 
-        `<p style="margin-bottom: 20px; color: #444; padding: 15px; background: rgba(255, 255, 255, 0.8); border-radius: 8px; border-left: 4px solid #667eea;">${line}</p>`
-      ).join('\n                ');
-    } else {
-      processedContent = `<p style="margin-bottom: 20px; color: #444; padding: 15px; background: rgba(255, 255, 255, 0.8); border-radius: 8px; border-left: 4px solid #667eea;">${content}</p>`;
+  // Check if content is JSON (multiple tabs) or regular content
+  let isMultipleTabs = false;
+  let tabsData: Array<{name: string, content: string}> = [];
+  
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].name && parsed[0].content !== undefined) {
+      isMultipleTabs = true;
+      tabsData = parsed;
     }
+  } catch {
+    // Not JSON, treat as regular content
+  }
+
+  let processedContent = '';
+  
+  if (isMultipleTabs) {
+    // Generate browser-like tabs interface
+    const tabsHTML = tabsData.map((tab, index) => `
+      <div class="tab-content" id="tab-${index}" style="display: ${index === 0 ? 'block' : 'none'}; padding: 20px; background: rgba(255, 255, 255, 0.95); border-radius: 8px; margin-top: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); transition: all 0.3s ease; opacity: ${index === 0 ? '1' : '0'}; transform: ${index === 0 ? 'translateY(0)' : 'translateY(10px)'};">
+        <h3 style="margin-bottom: 15px; color: #333; font-size: 1.5rem; border-bottom: 2px solid #667eea; padding-bottom: 10px;">${tab.name}</h3>
+        <div style="color: #444; line-height: 1.6;">
+          ${tab.content.split('\n').map(line => 
+            `<p style="margin-bottom: 15px; padding: 10px; background: rgba(255, 255, 255, 0.8); border-radius: 6px; border-left: 3px solid #667eea;">${line}</p>`
+          ).join('\n          ')}
+        </div>
+      </div>
+    `).join('\n      ');
+
+    const tabButtonsHTML = tabsData.map((tab, index) => `
+      <button 
+        class="tab-button" 
+        data-tab="${index}" 
+        style="padding: 10px 20px; margin-right: 5px; border: none; background: ${index === 0 ? '#667eea' : '#f0f0f0'}; color: ${index === 0 ? 'white' : '#333'}; border-radius: 8px 8px 0 0; cursor: pointer; transition: all 0.3s ease; font-weight: ${index === 0 ? 'bold' : 'normal'}; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);"
+        onclick="switchTab(${index})"
+      >
+        ${tab.name}
+      </button>
+    `).join('\n        ');
+
+    processedContent = `
+      <div style="margin-bottom: 20px;">
+        <div class="tab-buttons" style="border-bottom: 2px solid #ddd; margin-bottom: 0; padding: 0 10px;">
+          ${tabButtonsHTML}
+        </div>
+        ${tabsHTML}
+      </div>
+    `;
   } else {
-    processedContent = '<p style="margin-bottom: 20px; color: #666; font-style: italic; text-align: center;">No content provided</p>';
+    // Regular single content processing
+    if (content && content.trim()) {
+      const lines = content.split('\n').filter(line => line.trim());
+      if (lines.length > 0) {
+        processedContent = lines.map(line => 
+          `<p style="margin-bottom: 20px; color: #444; padding: 15px; background: rgba(255, 255, 255, 0.8); border-radius: 8px; border-left: 4px solid #667eea;">${line}</p>`
+        ).join('\n                ');
+      } else {
+        processedContent = `<p style="margin-bottom: 20px; color: #444; padding: 15px; background: rgba(255, 255, 255, 0.8); border-radius: 8px; border-left: 4px solid #667eea;">${content}</p>`;
+      }
+    } else {
+      processedContent = '<p style="margin-bottom: 20px; color: #666; font-style: italic; text-align: center;">No content provided</p>';
+    }
   }
 
   return `<!DOCTYPE html>

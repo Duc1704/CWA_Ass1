@@ -29,7 +29,10 @@ export default function Tabs(): JSX.Element {
     customTabs,
     addCustomTab,
     updateCustomTab,
-    deleteCustomTab
+    deleteCustomTab,
+    startRenamingTab,
+    saveTabName,
+    cancelRenamingTab
   } = useCustomTabs();
 
   const {
@@ -58,6 +61,9 @@ export default function Tabs(): JSX.Element {
           customTabs={customTabs} 
           onDeleteCustomTab={deleteCustomTab} 
           onUpdateCustomTab={updateCustomTab}
+          onStartRenamingTab={startRenamingTab}
+          onSaveTabName={saveTabName}
+          onCancelRenamingTab={cancelRenamingTab}
         />
       ) 
     },
@@ -65,7 +71,7 @@ export default function Tabs(): JSX.Element {
     { id: "escape", label: "Escape Room", content: <EscapeRoomTab /> },
     { id: "races", label: "Coding Races", content: <CodingRacesTab /> },
     { id: "about", label: "About", content: <AboutTab /> },
-  ], [addCustomTab, customTabs, deleteCustomTab, updateCustomTab]);
+  ], [addCustomTab, customTabs, deleteCustomTab, updateCustomTab, startRenamingTab, saveTabName, cancelRenamingTab]);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowRight") {

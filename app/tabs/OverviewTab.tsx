@@ -91,9 +91,10 @@ interface TabHeaderProps {
   onStartRenaming: (tabId: string) => void;
   onSaveName: (tabId: string, newName: string) => void;
   onCancelRenaming: (tabId: string) => void;
+  showRenameButtons: boolean;
 }
 
-const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStartRenaming, onSaveName, onCancelRenaming }) => {
+const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStartRenaming, onSaveName, onCancelRenaming, showRenameButtons }) => {
   const [editName, setEditName] = useState(tab.name);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -148,13 +149,17 @@ const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStar
       >
         {tab.name}
       </button>
-      <button
-        onClick={() => onStartRenaming(tab.id)}
-        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-        title="Rename tab"
-      >
-        ✏️
-      </button>
+      
+      {/* Rename button - only shows when global toggle is active */}
+      {showRenameButtons && (
+        <button
+          onClick={() => onStartRenaming(tab.id)}
+          className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+          title="Rename tab"
+        >
+          ✏️
+        </button>
+      )}
     </div>
   );
 };
@@ -255,6 +260,9 @@ export default function OverviewTab({
   onSaveTabName,
   onCancelRenamingTab
 }: OverviewTabProps): JSX.Element {
+  // State to control when rename buttons are visible
+  const [showRenameButtons, setShowRenameButtons] = useState(false);
+
   // Custom hooks
   const {
     newTabName,
@@ -329,6 +337,21 @@ export default function OverviewTab({
           onCreateTab={handleCreateTab}
         />
         
+        {/* Toggle Rename Buttons */}
+        {customTabs.length > 0 && (
+          <button
+            onClick={() => setShowRenameButtons(!showRenameButtons)}
+            className={`px-4 py-2 rounded-md transition-colors font-medium ${
+              showRenameButtons 
+                ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                : 'bg-gray-600 text-white hover:bg-gray-700'
+            }`}
+            title={showRenameButtons ? "Hide rename buttons" : "Show rename buttons"}
+          >
+            {showRenameButtons ? "🔒 Hide Rename" : "✏️ Show Rename"}
+          </button>
+        )}
+        
         {/* Common Generate Code Button */}
         {customTabs.length > 0 && (
           <button
@@ -357,6 +380,7 @@ export default function OverviewTab({
                 onStartRenaming={onStartRenamingTab}
                 onSaveName={onSaveTabName}
                 onCancelRenaming={onCancelRenamingTab}
+                showRenameButtons={showRenameButtons}
               />
             ))}
           </div>

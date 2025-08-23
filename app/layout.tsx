@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   description: "Accessible Next.js starter with tabs, dark mode, cookies",
 };
 
-const STUDENT_NAME = "Your Name";
-const STUDENT_NUMBER = "S1234567";
+const STUDENT_NAME = "Minh Duc Dang";
+const STUDENT_NUMBER = "22480348";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

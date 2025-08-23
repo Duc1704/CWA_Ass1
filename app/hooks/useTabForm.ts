@@ -17,7 +17,9 @@ export function useTabForm(onNewTabCreated: (newTab: CustomTab) => void) {
       onNewTabCreated(newTab);
       setNewTabName("");
       setShowCreateForm(false);
+      return newTab; // Return the created tab
     }
+    return null;
   }, [newTabName, onNewTabCreated]);
 
   const showForm = useCallback(() => {

@@ -1,4 +1,4 @@
-import { STUDENT_NAME, STUDENT_NUMBER } from '../layout';
+import { STUDENT_NAME, STUDENT_NUMBER } from '../constants';
 
 export default function Footer(): JSX.Element {
   return (

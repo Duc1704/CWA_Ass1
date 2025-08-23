@@ -41,7 +41,7 @@ const CopyToClipboard: React.FC<CopyToClipboardProps> = ({
         size={size}
         className={className}
       >
-        📋 {buttonText}
+        {buttonText}
       </Button>
       
       {/* Copy Status */}

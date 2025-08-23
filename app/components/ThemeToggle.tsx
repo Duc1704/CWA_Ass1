@@ -18,11 +18,17 @@ export default function ThemeToggle() {
 
     setTheme(initial);
     document.documentElement.setAttribute("data-theme", initial);
-    // Sync Tailwind dark variant
+    
+    // Ensure CSS variables are set immediately
+    const root = document.documentElement;
     if (initial === "dark") {
-      document.documentElement.classList.add("dark");
+      root.style.setProperty('--background', '#0a0a0a');
+      root.style.setProperty('--foreground', '#ededed');
+      root.classList.add("dark");
     } else {
-      document.documentElement.classList.remove("dark");
+      root.style.setProperty('--background', '#ffffff');
+      root.style.setProperty('--foreground', '#171717');
+      root.classList.remove("dark");
     }
   }, []);
 
@@ -30,12 +36,19 @@ export default function ThemeToggle() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
     document.documentElement.setAttribute("data-theme", next);
-    // Sync Tailwind dark variant
+    
+    // Ensure CSS variables are set immediately
+    const root = document.documentElement;
     if (next === "dark") {
-      document.documentElement.classList.add("dark");
+      root.style.setProperty('--background', '#0a0a0a');
+      root.style.setProperty('--foreground', '#ededed');
+      root.classList.add("dark");
     } else {
-      document.documentElement.classList.remove("dark");
+      root.style.setProperty('--background', '#ffffff');
+      root.style.setProperty('--foreground', '#171717');
+      root.classList.remove("dark");
     }
+    
     const expires = new Date(Date.now() + 365 * 864e5).toUTCString();
     document.cookie = `${THEME_COOKIE}=${next}; Expires=${expires}; Path=/; SameSite=Lax`;
   }

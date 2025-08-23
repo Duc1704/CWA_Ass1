@@ -11,7 +11,7 @@ export const STUDENT_NUMBER = "22480348";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning data-theme="light">
+    <html lang="en" suppressHydrationWarning>
       <body>
         <div className="fixed top-3 left-3 z-50 select-none" aria-label="Student Number">
           <span className="rounded-md px-2 py-1 text-xs font-semibold border shadow-sm" style={{

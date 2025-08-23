@@ -9,6 +9,7 @@ import {
   useCodeGeneration
 } from "../hooks";
 import CodeOutput from "../components/CodeOutput";
+import Button from "../components/Button";
 
 interface OverviewTabProps {
   onNewTabCreated: (newTab: CustomTab) => void;
@@ -38,22 +39,17 @@ const CreateTabForm: React.FC<CreateTabFormProps> = ({
   onHideForm,
   onCreateTab
 }) => (
-  <div className={`mb-8 overflow-hidden ${
-    showCreateForm 
-      ? 'border border-[--foreground]/20 rounded-lg bg-[--background] p-4 transition-all duration-300' 
-      : 'transition-none'
-  }`}>
+  <>
     {!showCreateForm ? (
-      <div className="inline-block border border-[--foreground]/20 rounded-lg bg-[--background] px-2 py-1">
-        <button
-          onClick={onShowForm}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium text-sm whitespace-nowrap"
-        >
-          + Create New Tab
-        </button>
-      </div>
+      <Button
+        onClick={onShowForm}
+        variant="primary"
+        size="md"
+      >
+        Create New Tab
+      </Button>
     ) : (
-      <div className="space-y-4">
+      <div className="mb-8 border border-[--foreground]/20 rounded-lg bg-[--background] p-4 space-y-4">
         <h3 className="text-lg font-semibold">Create New Tab</h3>
         <div className="flex gap-3 items-center">
           <input
@@ -65,23 +61,23 @@ const CreateTabForm: React.FC<CreateTabFormProps> = ({
             onKeyPress={(e) => e.key === "Enter" && onCreateTab()}
             autoFocus
           />
-          <button
+          <Button
             onClick={onCreateTab}
             disabled={!newTabName.trim()}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            variant="success"
           >
             Create Tab
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onHideForm}
-            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            variant="secondary"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     )}
-  </div>
+  </>
 );
 
 interface TabHeaderProps {
@@ -118,21 +114,23 @@ const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStar
           className="px-3 py-2 rounded-md border border-blue-500 bg-[--background] text-[--foreground] focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           autoFocus
         />
-        <button
+        <Button
           onClick={() => onSaveName(tab.id, editName)}
-          className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+          variant="success"
+          size="sm"
         >
-          ✓
-        </button>
-        <button
+          Save
+        </Button>
+        <Button
           onClick={() => {
             onCancelRenaming(tab.id);
             setEditName(tab.name);
           }}
-          className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-colors"
+          variant="secondary"
+          size="sm"
         >
-          ✕
-        </button>
+          Cancel
+        </Button>
       </div>
     );
   }
@@ -150,15 +148,16 @@ const TabHeader: React.FC<TabHeaderProps> = ({ tab, isSelected, onSelect, onStar
         {tab.name}
       </button>
       
-      {/* Rename button - only shows when global toggle is active */}
+      {/* Edit button - only shows when global toggle is active */}
       {showRenameButtons && (
-        <button
+        <Button
           onClick={() => onStartRenaming(tab.id)}
-          className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-          title="Rename tab"
+          variant="primary"
+          size="sm"
+          title="Edit Tab Heading"
         >
-          ✏️
-        </button>
+          Edit
+        </Button>
       )}
     </div>
   );
@@ -339,28 +338,25 @@ export default function OverviewTab({
         
         {/* Toggle Rename Buttons */}
         {customTabs.length > 0 && (
-          <button
+          <Button
             onClick={() => setShowRenameButtons(!showRenameButtons)}
-            className={`px-4 py-2 rounded-md transition-colors font-medium ${
-              showRenameButtons 
-                ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                : 'bg-gray-600 text-white hover:bg-gray-700'
-            }`}
-            title={showRenameButtons ? "Hide rename buttons" : "Show rename buttons"}
+            variant={showRenameButtons ? "warning" : "secondary"}
+            title={showRenameButtons ? "Hide edit buttons" : "Show edit buttons"}
           >
-            {showRenameButtons ? "🔒 Hide Rename" : "✏️ Show Rename"}
-          </button>
+            {showRenameButtons ? "Hide Edit" : "Show Edit"}
+          </Button>
         )}
         
         {/* Common Generate Code Button */}
         {customTabs.length > 0 && (
-          <button
+          <Button
             onClick={() => generateAllTabsCode()}
             disabled={isGenerating}
-            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            variant="primary"
+            className="bg-purple-600 hover:bg-purple-700"
           >
-            {isGenerating ? "🔄 Generating..." : "🚀 Generate All Tabs Code"}
-          </button>
+            {isGenerating ? "Generating..." : "Generate All Tabs Code"}
+          </Button>
         )}
       </div>
 

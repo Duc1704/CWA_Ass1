@@ -24,10 +24,12 @@ export default function ThemeToggle() {
     if (initial === "dark") {
       root.style.setProperty('--background', '#0a0a0a');
       root.style.setProperty('--foreground', '#ededed');
+      root.style.setProperty('--header-bg', '#1a1a1a');
       root.classList.add("dark");
     } else {
       root.style.setProperty('--background', '#ffffff');
       root.style.setProperty('--foreground', '#171717');
+      root.style.setProperty('--header-bg', '#f8f9fa');
       root.classList.remove("dark");
     }
   }, []);
@@ -42,10 +44,12 @@ export default function ThemeToggle() {
     if (next === "dark") {
       root.style.setProperty('--background', '#0a0a0a');
       root.style.setProperty('--foreground', '#ededed');
+      root.style.setProperty('--header-bg', '#1a1a1a');
       root.classList.add("dark");
     } else {
       root.style.setProperty('--background', '#ffffff');
       root.style.setProperty('--foreground', '#171717');
+      root.style.setProperty('--header-bg', '#f8f9fa');
       root.classList.remove("dark");
     }
     

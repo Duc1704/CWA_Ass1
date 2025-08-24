@@ -26,20 +26,20 @@ export default function Header(): JSX.Element {
         </span>
       </div>
 
-      {/* Hamburger Menu and Theme Toggle - Top Right Corner */}
-      <div className="fixed top-3 right-3 z-50 flex items-center gap-4">
-        <ThemeToggle />
-        <HamburgerMenu />
-      </div>
-
       {/* Main Header Section with Background */}
       <div 
-        className="border-b border-[--foreground]/10 py-8 mb-6 pt-16" 
+        className="border-b border-[--foreground]/10 py-8 mb-6 pt-16 relative" 
         style={{ 
           backgroundColor: 'var(--header-bg, #2196f3)',
           minHeight: '120px'
         }}
       >
+        {/* Hamburger Menu and Theme Toggle - Inside Header Background */}
+        <div className="absolute top-6 right-6 z-50 flex items-center gap-4">
+          <ThemeToggle />
+          <HamburgerMenu />
+        </div>
+        
         <div className="flex justify-center">
           <h1 className="text-5xl font-extrabold transition-colors duration-200 text-center cursor-default hover:text-blue-600" style={{ color: 'var(--foreground)' }}>
             Tabs Generator

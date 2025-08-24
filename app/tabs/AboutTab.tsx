@@ -74,10 +74,21 @@ export default function AboutTab(): JSX.Element {
               Hello! My name is Minh Duc Dang. You can call me Max.
             </p>
             <p>
-
+            
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Demo video section */}
+      <div className="mx-auto w-full max-w-5xl mt-10 text-center">
+        <h3 className="text-xl font-semibold mb-3">Demo video</h3>
+        <video className="w-full max-w-3xl mx-auto block rounded-lg border border-[--foreground]/10 shadow-sm" controls preload="metadata" playsInline>
+          <source src="/videos/demo.mp4" type="video/mp4" />
+        </video>
+        <p className="mt-3 text-sm opacity-80">
+          Watch the demo video to see how to use the website.
+        </p>
       </div>
     </div>
   );

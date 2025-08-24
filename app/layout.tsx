@@ -10,7 +10,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <main id="main" className="container min-h-screen bg-[--background] text-[--foreground] transition-colors" role="main">
+        <main id="main" className="min-h-screen flex flex-col bg-[--background] text-[--foreground] transition-colors" role="main">
           {children}
         </main>
       </body>

@@ -33,7 +33,7 @@ const ButtonControls: React.FC<ButtonControlsProps> = ({
   onGenerateCode
 }) => {
   return (
-    <div className="flex items-center gap-4 mb-8">
+    <div className="flex flex-col gap-3 mb-8 sm:flex-row sm:flex-wrap sm:items-center">
       <CreateNewTab
         onNewTabCreated={onNewTabCreated}
         onSelectTab={onSelectTab}

@@ -32,8 +32,8 @@ export default function TabNavigationBar({
   if (!isLoaded) {
     return (
       <section aria-label="Tabs section" className="w-full">
-        <div className="mx-auto max-w-5xl w-full select-none">
-          <div className="flex items-center justify-center gap-3 text-sm sm:text-base">
+        <div className="mx-auto max-w-5xl w-full select-none px-4">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-sm sm:text-base">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -60,10 +60,10 @@ export default function TabNavigationBar({
       <div
         role="tablist"
         aria-label="Pages"
-        className="mx-auto max-w-5xl w-full select-none"
+        className="mx-auto max-w-5xl w-full select-none px-4"
         onKeyDown={onKeyDown}
       >
-        <div className="flex items-center justify-center gap-3 text-sm sm:text-base">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-sm sm:text-base">
           {tabs.map((tab, index) => {
             const selected = index === selectedIndex;
             return (

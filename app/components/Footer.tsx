@@ -4,7 +4,7 @@ export default function Footer(): JSX.Element {
   return (
     <footer className="py-4 text-center text-[--foreground]/70 border-t border-[--foreground]/20 bg-[--background]">
       <p className="text-sm">
-        © 2025 {STUDENT_NAME} - Student No: {STUDENT_NUMBER} | Date: 23/08/2025
+        © Copyright 2025 {STUDENT_NAME} - Student No: {STUDENT_NUMBER} | Date: 23/08/2025
       </p>
     </footer>
   );

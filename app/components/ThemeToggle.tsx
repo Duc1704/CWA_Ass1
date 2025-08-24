@@ -29,8 +29,10 @@ export default function ThemeToggle() {
       console.log('Dark theme set, header-bg:', root.style.getPropertyValue('--header-bg'));
     } else {
       root.style.setProperty('--background', '#ffffff');
-      root.style.setProperty('--foreground', '#171717');
+      root.style.setProperty('--foreground', '#000000');
       root.style.setProperty('--header-bg', '#2196f3');
+      root.style.setProperty('--content-bg', 'rgba(255, 255, 255, 0.95)');
+      root.style.setProperty('--card-bg', 'rgba(255, 255, 255, 0.9)');
       root.classList.remove("dark");
       console.log('Light theme set, header-bg:', root.style.getPropertyValue('--header-bg'));
     }
@@ -51,8 +53,10 @@ export default function ThemeToggle() {
       console.log('Dark theme toggled, header-bg:', root.style.getPropertyValue('--header-bg'));
     } else {
       root.style.setProperty('--background', '#ffffff');
-      root.style.setProperty('--foreground', '#171717');
+      root.style.setProperty('--foreground', '#000000');
       root.style.setProperty('--header-bg', '#2196f3');
+      root.style.setProperty('--content-bg', 'rgba(255, 255, 255, 0.95)');
+      root.style.setProperty('--card-bg', 'rgba(255, 255, 255, 0.9)');
       root.classList.remove("dark");
       console.log('Light theme toggled, header-bg:', root.style.getPropertyValue('--header-bg'));
     }

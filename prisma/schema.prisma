@@ -1,0 +1,33 @@
+// Prisma schema for storing custom escape room questions
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model CustomSet {
+  id        String     @id @default(cuid())
+  createdAt DateTime   @default(now())
+  author    String
+  topics    CustomTopic[]
+}
+
+model CustomTopic {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  title      String
+  question   String
+  answer     String
+  orderIndex Int
+
+  setId String
+  set   CustomSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  @@index([setId, orderIndex])
+}
+
+

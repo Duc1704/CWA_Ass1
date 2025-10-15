@@ -1,91 +1,97 @@
 import React, { useEffect, useMemo, useState } from "react";
 
+type WizardItem = {
+  question: string;
+  hints: [string, string, string];
+  answer: string;
+};
+
 export default function EscapeRoomTab(): JSX.Element {
-  const backgroundImageUrl = useMemo(() => {
-    // Prefer the file under /public/images, fallback to root if user moved it
-    return "/images/escaperoom.png";
-  }, []);
+  const baseBg = useMemo(() => "/images/backGround.png", []);
+  // Editable hotspot positions per phase (percentages). Adjust here to move buttons.
+  // Example: { top: "42%", left: "50%" }
+  const PHASE_HOTSPOTS = useMemo(() => ({
+    0: {
+      hints: [
+        { top: "75%", left: "72%" },
+        { top: "66%", left: "20%" },
+        { top: "66%", left: "82%" },
+      ],
+      lock: { top: "50%", left: "28%" },
+    },
+    1: {
+      hints: [
+        { top: "70%", left: "70%" },
+        { top: "65%", left: "40%" },
+        { top: "90%", left: "20%" },
+      ],
+      lock: { top: "45%", left: "50%" },
+    },
+    2: {
+      hints: [
+        { top: "75%", left: "60%" },
+        { top: "47%", left: "25%" },
+        { top: "64%", left: "80%" },
+      ],
+      lock: { top: "50%", left: "46%" },
+    },
+    3: {
+      hints: [
+        { top: "80%", left: "70%" },
+        { top: "75%", left: "13%" },
+        { top: "66%", left: "40%" },
+      ],
+      lock: { top: "53%", left: "51%" },
+    },
+  } as Record<number, { hints: Array<{ top: string; left: string }>; lock: { top: string; left: string } }>), []);
 
-  const [name, setName] = useState<string>("");
-  const [seconds, setSeconds] = useState<string>("300");
-  const [error, setError] = useState<string>("");
-  const [submitted, setSubmitted] = useState<boolean>(false);
+  // Wizard for 4 questions
+  const [wizardStep, setWizardStep] = useState<number>(0); // 0..3
+  const [items, setItems] = useState<WizardItem[]>([
+    { question: "", hints: ["", "", ""], answer: "" },
+    { question: "", hints: ["", "", ""], answer: "" },
+    { question: "", hints: ["", "", ""], answer: "" },
+    { question: "", hints: ["", "", ""], answer: "" },
+  ]);
 
-  // Flow: mode -> topic -> questions -> setup -> game -> result
-  const [flowStep, setFlowStep] = useState<"mode" | "topic" | "questions" | "setup" | "game" | "result">("mode");
+  type Flow = "mode" | "customEntry" | "topicName" | "wizard" | "prevTopics" | "game" | "bad" | "good";
+  const [flow, setFlow] = useState<Flow>("mode");
   const [mode, setMode] = useState<"default" | "custom" | "">("");
-  type QA = { topic: string; question: string; answer: string };
-  const [customItems, setCustomItems] = useState<QA[]>([]);
-  const [currentTopic, setCurrentTopic] = useState<string>("");
+  const [currentTopicTitle, setCurrentTopicTitle] = useState<string>("");
   const [modeError, setModeError] = useState<string>("");
+
+  // Game state
+  const [stageIndex, setStageIndex] = useState<number>(0); // 0..3
+  const [answerInputs, setAnswerInputs] = useState<string[]>(["", "", "", ""]);
+  const [answerErrors, setAnswerErrors] = useState<string[]>(["", "", "", ""]);
+  const [answeredCorrect, setAnsweredCorrect] = useState<boolean[]>([false, false, false, false]);
+  const [openPanel, setOpenPanel] = useState<"qa" | "hint1" | "hint2" | "hint3" | null>(null);
+
+  // Timer
+  const initialSeconds = 300;
+  const [remaining, setRemaining] = useState<number>(initialSeconds);
+  const [running, setRunning] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [persistError, setPersistError] = useState<string>("");
+
+  // Saved topics fetched from API when needed
   const [savedTopics, setSavedTopics] = useState<Array<{ title: string; items: { question: string; answer: string }[] }>>([]);
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number | null>(null);
-  // Default stages used when mode === 'default'
-  const defaultStages = useMemo(() => [
-    {
-      title: "Stage 1: Format code correctly",
-      description: "Format the following JavaScript exactly. Target: `const x = [1, 2, 3];`",
-      promptLabel: "Unformatted snippet:",
-      preset: "const x=[1,2,3]",
-    },
-    {
-      title: "Stage 2: Name variables clearly",
-      description: "Rename variables to be descriptive without changing behavior.",
-      promptLabel: "Original snippet:",
-      preset: "function f(a,b){return a+b}",
-    },
-    {
-      title: "Stage 3: Fix a small bug",
-      description: "Correct the function so it returns the proper result.",
-      promptLabel: "Buggy snippet:",
-      preset: "const isEven=n=>n%2===1",
-    },
-    {
-      title: "Stage 4: Refactor for readability",
-      description: "Refactor the code into a clean, readable form.",
-      promptLabel: "Refactor this:",
-      preset: "if(flag){doA()}else{doA()}",
-    },
-  ], []);
-  // Game stages are derived from selection
-  const [gameStages, setGameStages] = useState<Array<{ title: string; description: string; promptLabel: string; preset: string }>>([]);
-  const [stageIndex, setStageIndex] = useState<number>(0);
-  const [answers, setAnswers] = useState<string[]>([]);
-  const [expectedAnswers, setExpectedAnswers] = useState<string[]>([]);
-  const [result, setResult] = useState<"none" | "lose" | "win">("none");
-
-  const parsedInitialSeconds = useMemo(() => Math.min(3600, Math.max(10, Number(seconds) || 300)), [seconds]);
-  const [remaining, setRemaining] = useState<number>(parsedInitialSeconds);
-  const [running, setRunning] = useState<boolean>(false);
-  const [hintsLeft, setHintsLeft] = useState<number>(3);
-
-  useEffect(() => {
-    if (!submitted) return;
-    setRemaining(parsedInitialSeconds);
-  }, [submitted, parsedInitialSeconds]);
 
   useEffect(() => {
     if (!running) return;
     const id = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(id);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setRemaining((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(id);
   }, [running]);
 
-  // Auto-lose when time runs out and player is still in the game screen
   useEffect(() => {
-    if (flowStep === "game" && remaining === 0) {
+    if (flow === "game" && remaining === 0) {
       setRunning(false);
-      setResult("lose");
-      setFlowStep("result");
+      setFlow("bad");
     }
-  }, [remaining, flowStep]);
+  }, [remaining, flow]);
 
   const formatTime = (total: number) => {
     const mm = Math.floor(total / 60).toString().padStart(2, "0");
@@ -95,500 +101,535 @@ export default function EscapeRoomTab(): JSX.Element {
 
   const normalize = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
-  const restart = () => {
-    setFlowStep("mode");
-    setMode("");
-    setCustomItems([]);
-    setModeError("");
-    setSubmitted(false);
-    setName("");
-    setSeconds("300");
-    setError("");
-    setGameStages([]);
-    setAnswers([]);
-    setExpectedAnswers([]);
+  const startGame = async () => {
+    // Validate all items have content
+    for (let i = 0; i < 4; i++) {
+      const it = items[i];
+      if (!it.question.trim() || !it.answer.trim()) return; // silently block if incomplete
+    }
+    // Save topic and questions to DB (fire and forget)
+    setPersistError("");
+    setSaving(true);
+    try {
+      const res = await fetch("/api/custom-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: currentTopicTitle.trim() || "Untitled",
+          items: items.map((it) => ({
+            question: it.question,
+            hint1: it.hints[0] || undefined,
+            hint2: it.hints[1] || undefined,
+            hint3: it.hints[2] || undefined,
+            answer: it.answer,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to save topic");
+      }
+    } catch (e: any) {
+      setPersistError(e?.message || "Failed to save topic");
+      setSaving(false);
+      return;
+    }
+    setSaving(false);
     setStageIndex(0);
-    setHintsLeft(3);
-    setRunning(false);
-    setRemaining(300);
-    setResult("none");
+    setAnswerInputs(["", "", "", ""]);
+    setAnswerErrors(["", "", "", ""]);
+    setAnsweredCorrect([false, false, false, false]);
+    setOpenPanel(null);
+    setRemaining(initialSeconds);
+    setFlow("game");
+    setRunning(true);
   };
 
-  const onStart = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    const trimmed = name.trim();
-    const value = Number(seconds);
-    if (!trimmed) {
-      setError("Please enter your name.");
-      return;
-    }
-    if (!Number.isFinite(value) || Number.isNaN(value)) {
-      setError("Timer must be a number between 10 and 3600 seconds.");
-      return;
-    }
-    if (value < 10 || value > 3600) {
-      setError("Timer must be between 10 and 3600 seconds.");
-      return;
-    }
-    // Build stages based on mode
-    if (mode === "default") {
-      setGameStages(defaultStages);
-      setAnswers(defaultStages.map(() => ""));
-      setExpectedAnswers([]);
-    } else if (mode === "custom") {
-      const valid = customItems.filter((q) => q.topic.trim() || q.question.trim());
-      if (valid.length === 0) {
-        setError("Please add at least one custom question.");
-        return;
-      }
-      if (valid.some((q) => !q.question.trim() || !q.answer.trim())) {
-        setError("Please provide answers for all custom questions.");
-        return;
-      }
-      const built = valid.map((q, i) => ({
-        title: q.topic.trim() ? q.topic.trim() : `Stage ${i + 1}`,
-        description: "Answer the question below.",
-        promptLabel: "Question:",
-        preset: q.question.trim(),
-      }));
-      setGameStages(built);
-      setAnswers(built.map(() => ""));
-      setExpectedAnswers(valid.map((q) => q.answer.trim()));
-    } else {
-      setError("Please choose Default or Custom questions.");
-      return;
-    }
-    setSubmitted(true);
-    setFlowStep("game");
+  const restartAll = () => {
+    setWizardStep(0);
+    setItems([
+      { question: "", hints: ["", "", ""], answer: "" },
+      { question: "", hints: ["", "", ""], answer: "" },
+      { question: "", hints: ["", "", ""], answer: "" },
+      { question: "", hints: ["", "", ""], answer: "" },
+    ]);
+    setStageIndex(0);
+    setAnswerInputs(["", "", "", ""]);
+    setAnswerErrors(["", "", "", ""]);
+    setAnsweredCorrect([false, false, false, false]);
+    setOpenPanel(null);
+    setRemaining(initialSeconds);
     setRunning(false);
-  };
-
-  const proceedFromMode = (e: React.FormEvent) => {
-    e.preventDefault();
+    setFlow("mode");
+    setMode("");
+    setCurrentTopicTitle("");
     setModeError("");
-    if (mode === "") {
-      setModeError("Please choose an option to continue.");
-      return;
+  };
+
+  const phaseBackground = (idx: number) => {
+    switch (idx) {
+      case 0: return "/images/phase1.png";
+      case 1: return "/images/phase2.png";
+      case 2: return "/images/phase3.png";
+      case 3: return "/images/phase4.png";
+      default: return baseBg;
     }
-    // If a saved topic is chosen, adopt it immediately and skip topic/questions screens
-    if (
-      mode === "custom" &&
-      selectedTopicIndex !== null &&
-      savedTopics[selectedTopicIndex]
-    ) {
-      const topic = savedTopics[selectedTopicIndex];
-      setCustomItems(topic.items.map((it) => ({ topic: topic.title, question: it.question, answer: it.answer })));
-      setFlowStep("setup");
-      return;
-    }
-    setFlowStep(mode === "custom" ? "topic" : "setup");
   };
 
-  const addCustomItem = () => {
-    setCustomItems((prev) => [...prev, { topic: prev[0]?.topic || (customItems[0]?.topic ?? ""), question: "", answer: "" }]);
-  };
-  const removeCustomItem = (index: number) => {
-    setCustomItems((prev) => prev.filter((_, i) => i !== index));
-  };
+  // Active hotspots for current phase
+  const activeHotspots = PHASE_HOTSPOTS[stageIndex];
 
-  const addTopic = () => {
-    const t = currentTopic.trim();
-    if (!t) return;
-    setCustomItems((prev) => [...prev, { topic: t, question: "", answer: "" }]);
-    setCurrentTopic("");
-  };
-
-  // Load previously saved topics when the user selects custom mode (preview only)
+  // Load saved topics grouping by title
   useEffect(() => {
-    if (mode !== "custom") return;
+    if (flow !== "prevTopics") return;
     let cancelled = false;
     fetch("/api/custom-questions")
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         if (cancelled) return;
-        const titleToItems = new Map<string, { question: string; answer: string }[]>();
-        (data || []).forEach((set: any) => {
-          (set?.topics || []).forEach((t: any) => {
-            if (!t?.title || !t?.question) return;
-            const title = String(t.title);
-            const item = { question: String(t.question), answer: String(t.answer ?? "") };
-            const arr = titleToItems.get(title) ?? [];
-            if (!arr.some((x) => x.question === item.question)) arr.push(item);
-            titleToItems.set(title, arr);
-          });
-        });
-        setSavedTopics(Array.from(titleToItems.entries()).map(([title, items]) => ({ title, items })));
+        const topics = Array.isArray(data) ? data : [];
+        const mapped = topics.map((t: any) => ({
+          title: String(t?.title ?? ""),
+          items: (Array.isArray(t?.questions) ? t.questions : []).map((q: any) => ({
+            question: String(q?.prompt ?? ""),
+            answer: String(q?.answer ?? ""),
+          })),
+        })).filter((t: any) => t.title);
+        setSavedTopics(mapped);
         setSelectedTopicIndex(null);
       })
-      .catch(() => {
-        setSavedTopics([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mode]);
+      .catch(() => setSavedTopics([]));
+    return () => { cancelled = true; };
+  }, [flow]);
 
-  // Persist the custom set to the database (author optional)
-  const saveCurrentCustomSet = async (): Promise<void> => {
-    try {
-      const items = customItems
-        .filter((it) => it.question.trim() && it.answer.trim())
-        .map((it, idx) => ({
-          title: it.topic || `Stage ${idx + 1}`,
-          question: it.question,
-          answer: it.answer,
-        }));
-      if (items.length === 0) return;
-      const res = await fetch("/api/custom-questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ author: name.trim() || "anonymous", items }),
-      });
-      if (!res.ok) return;
-      const created = await res.json();
-      if (created?.topics) {
-        setSavedTopics((prev) => {
-          const map = new Map<string, { question: string; answer: string }[]>();
-          prev.forEach((g) => map.set(g.title, [...g.items]));
-          created.topics.forEach((t: any) => {
-            const title = String(t.title);
-            const item = { question: String(t.question), answer: String(t.answer ?? "") };
-            const arr = map.get(title) ?? [];
-            if (!arr.some((x) => x.question === item.question)) arr.push(item);
-            map.set(title, arr);
-          });
-          return Array.from(map.entries()).map(([title, items]) => ({ title, items }));
-        });
-      }
-    } catch {
-      // ignore network errors for now
+  const handleSubmitAnswer = () => {
+    const curr = answerInputs[stageIndex] || "";
+    const expected = items[stageIndex].answer || "";
+    if (normalize(curr) === normalize(expected)) {
+      setAnsweredCorrect((prev) => prev.map((v, i) => (i === stageIndex ? true : v)));
+      setAnswerErrors((prev) => prev.map((v, i) => (i === stageIndex ? "" : v)));
+    } else {
+      setAnswerErrors((prev) => prev.map((v, i) => (i === stageIndex ? "The answer is not correct." : v)));
+    }
+  };
+
+  const goNextStage = () => {
+    if (!answeredCorrect[stageIndex]) return;
+    if (stageIndex < 3) {
+      setStageIndex((i) => i + 1);
+      setOpenPanel(null);
+    } else {
+      setRunning(false);
+      setFlow("good");
     }
   };
 
   return (
     <div id="escape" className="relative w-full">
-      {/* Full-bleed wrapper with comfortable spacing */}
       <div className="relative w-screen max-w-none ml-[calc(50%-50vw)] mr-[calc(50%-50vw)] px-4 sm:px-6 py-4">
-        {/* Background image card */}
-        <div
-          className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
-          style={{ backgroundImage: `url(${backgroundImageUrl})` }}
-        >
-          {/* Darken the background more for higher contrast */}
-          <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
-
-          {/* Content */}
-          <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
-            {flowStep === "mode" ? (
-              <form onSubmit={proceedFromMode} className="mx-4 w-full max-w-2xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
-                <h2 className="text-xl font-bold text-center mb-4">Escape Room</h2>
-                <div className="mb-4 text-base">Choose question set</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setMode("default")}
-                    className={`rounded-md border px-4 py-3 text-left ${mode === "default" ? "border-white bg-white/10" : "border-white/30 hover:bg-white/5"}`}
-                  >
-                    <div className="font-semibold mb-1">Default questions</div>
-                    <div className="text-sm opacity-80">Use the preset 4 stages.</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode("custom")}
-                    className={`rounded-md border px-4 py-3 text-left ${mode === "custom" ? "border-white bg-white/10" : "border-white/30 hover:bg-white/5"}`}
-                  >
-                    <div className="font-semibold mb-1">Create your own</div>
-                    <div className="text-sm opacity-80">Write your own questions and answers.</div>
-                  </button>
-                </div>
-
-                {mode === "custom" && (
-                  <div className="mt-2">
-                    <div className="text-base mb-2">Your topics</div>
-                    {savedTopics.length === 0 ? (
-                      <div className="text-sm opacity-70">No saved topics yet. Create some to see them here.</div>
-                    ) : (
-                      <div>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {savedTopics.map((t, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => setSelectedTopicIndex((cur) => (cur === idx ? null : idx))}
-                              className={`px-2.5 py-1 rounded-full border ${selectedTopicIndex === idx ? "border-white bg-white/10" : "border-white/30 hover:bg-white/5"}`}
-                            >
-                              {t.title}
-                            </button>
-                          ))}
-                        </div>
-                        {selectedTopicIndex !== null && savedTopics[selectedTopicIndex] && (
-                          <div className="rounded-md border border-white/20 p-3 bg-black/40">
-                            <div className="font-semibold mb-2">{savedTopics[selectedTopicIndex]?.title}</div>
-                            <ul className="list-disc list-inside space-y-1 text-sm opacity-90">
-                              {(savedTopics[selectedTopicIndex]?.items ?? []).map((it, qi) => (
-                                <li key={qi}>{it.question}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
+        {
+          flow === "mode" ? (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(${baseBg})` }}
+            >
+              <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
+                <div className="mx-4 w-full max-w-xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-center mb-6">Escape Room</h2>
+                  <div className="space-y-3">
+                    <button onClick={() => setFlow("topicName")} className="w-full px-4 py-3 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Create a question</button>
+                    <button onClick={() => setFlow("prevTopics")} className="w-full px-4 py-3 rounded-md border border-white/40 hover:bg-white/10">Previous topic</button>
                   </div>
-                )}
-
-                {modeError && <div className="text-red-400 text-sm mb-3" role="alert">{modeError}</div>}
-
-                <div className={`flex items-center ${mode === "custom" && selectedTopicIndex !== null && savedTopics[selectedTopicIndex] ? "justify-between" : "justify-end"}`}>
-                  {mode === "custom" && selectedTopicIndex !== null && savedTopics[selectedTopicIndex] && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const topic = savedTopics[selectedTopicIndex!];
-                        try {
-                          await fetch(`/api/custom-questions?title=${encodeURIComponent(topic.title)}`, { method: "DELETE" });
-                          setSavedTopics((prev) => prev.filter((_, i) => i !== selectedTopicIndex));
-                          setSelectedTopicIndex(null);
-                        } catch {
-                          // ignore for now
-                        }
-                      }}
-                      className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
-                    >
-                      Remove topic
-                    </button>
-                  )}
-                  <button
-                    type="submit"
-                    onClick={() => {
-                      if (mode === "custom" && selectedTopicIndex !== null && savedTopics[selectedTopicIndex]) {
-                        const topic = savedTopics[selectedTopicIndex];
-                        setCustomItems(topic.items.map((it) => ({ topic: topic.title, question: it.question, answer: it.answer })));
-                      }
-                    }}
-                    className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20"
-                  >
-                    {mode === "custom" && selectedTopicIndex !== null && savedTopics[selectedTopicIndex] ? "Use topic" : "Continue"}
-                  </button>
                 </div>
-              </form>
-            ) : flowStep === "topic" ? (
-              <form onSubmit={(e) => { e.preventDefault(); const t = currentTopic.trim(); if (!t && customItems.length === 0) { setModeError("Please enter a topic to continue."); return; } if (t) { setCustomItems((prev) => [...prev, { topic: t, question: "", answer: "" }]); setCurrentTopic(""); } setModeError(""); setFlowStep("questions"); }} className="mx-4 w-full max-w-2xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
-                <h2 className="text-xl font-bold text-center mb-4">Create your topics</h2>
-                <div className="mb-4">Enter the topic for your custom stage.</div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={currentTopic}
-                    onChange={(e) => setCurrentTopic(e.target.value)}
-                    placeholder="e.g., Hobbies, Math, History"
-                    className="flex-1 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
-                  />
-                </div>
-                {/* Intentionally hide created topic chips on this screen */}
-                {modeError && <div className="text-red-400 text-sm mt-3" role="alert">{modeError}</div>}
-                <div className="flex justify-between mt-6">
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFlowStep("mode"); }} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
-                  <button type="submit" className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Next</button>
-                </div>
-              </form>
-            ) : flowStep === "questions" ? (
-              <form onSubmit={async (e) => { e.preventDefault(); if (customItems.length === 0) { setModeError("Please add at least one topic."); return; } if (customItems.every((it) => !it.question.trim())) { setModeError("Add at least one question."); return; } await saveCurrentCustomSet(); setFlowStep("setup"); }} className="mx-4 w-full max-w-3xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
-                <h2 className="text-xl font-bold text-center mb-4">Write questions for your topic</h2>
-                <div className="text-base opacity-80 mb-4">Topic: <span className="font-semibold opacity-100">{customItems[0]?.topic || "(untitled)"}</span></div>
-                <div className="space-y-4">
-                  {customItems.map((item, idx) => (
-                    <div key={idx} className="rounded-md border border-white/20 p-4 bg-black/40">
-                      <label className="block text-sm mb-1">Question {idx + 1}</label>
-                      <textarea
-                        rows={3}
-                        value={item.question}
-                        onChange={(e) => setCustomItems((prev) => prev.map((it, i) => i === idx ? { ...it, question: e.target.value } : it))}
-                        placeholder="Type your question"
-                        className="w-full mb-3 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
-                      />
-                      <label className="block text-sm mb-1">Answer</label>
-                      <input
-                        type="text"
-                        value={item.answer}
-                        onChange={(e) => setCustomItems((prev) => prev.map((it, i) => i === idx ? { ...it, answer: e.target.value } : it))}
-                        placeholder="Type the expected answer"
-                        className="w-full px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
-                      />
-                      <div className="mt-3 text-right">
-                        <button type="button" onClick={() => removeCustomItem(idx)} className="px-3 py-1 rounded-md border border-white/30 hover:bg-white/10">Remove</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between mt-6">
-                  <button type="button" onClick={() => setFlowStep("topic")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
-                  <button type="button" onClick={addCustomItem} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Add question</button>
-                  <button type="submit" className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Next</button>
-                </div>
-              </form>
-            ) : flowStep === "setup" ? (
-              <form
-                onSubmit={onStart}
-                className="mx-4 w-full max-w-md bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm"
-              >
-                <h2 className="text-xl font-bold text-center mb-4">Escape Room</h2>
-
-                <label className="block text-sm mb-1" htmlFor="playerName">Enter your name</label>
-                <input
-                  id="playerName"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="your name"
-                  className="w-full mb-4 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/40 focus:border-white focus:ring-2 focus:ring-white/40 outline-none"
-                />
-
-                <label className="block text-sm mb-1" htmlFor="seconds">
-                  Set timer (seconds 10 - 3600)
-                </label>
-                <input
-                  id="seconds"
-                  type="number"
-                  inputMode="numeric"
-                  min={10}
-                  max={3600}
-                  value={seconds}
-                  onChange={(e) => setSeconds(e.target.value)}
-                  className="w-full mb-4 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/40 focus:border-white focus:ring-2 focus:ring-white/40 outline-none"
-                />
-
-                {error && (
-                  <div className="text-red-400 text-sm mb-3" role="alert">
-                    {error}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2 rounded-md bg-[--foreground] text-[--background] font-semibold hover:opacity-90 transition"
-                >
-                  Start Game
-                </button>
-              </form>
-            ) : flowStep === "result" ? (
-              <div className="mx-4 w-full max-w-xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-8 text-center backdrop-blur-sm">
-                <h2 className="text-2xl font-bold mb-3">{result === "lose" ? "You are a loser" : "You escaped!"}</h2>
-                <p className="opacity-80 mb-6">{result === "lose" ? "Your answers did not match the author's." : "Great job finishing the stages."}</p>
-                <button onClick={restart} className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Restart</button>
               </div>
-            ) : (
-              <div className="mx-4 w-full max-w-7xl xl:max-w-[88rem] grid grid-cols-1 lg:grid-cols-[3fr_1.2fr] gap-8">
-                {/* Left: stage content */}
-                <div className="bg-[--background]/70 border border-white/10 rounded-xl p-6 lg:p-8 text-white backdrop-blur-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-base opacity-80">Stage {stageIndex + 1} of {gameStages.length}</div>
-                    <div className="text-base opacity-80">{running ? "In progress" : "Paused"}</div>
+            </div>
+          ) : flow === "customEntry" ? (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(${baseBg})` }}
+            >
+              <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
+                <div className="mx-4 w-full max-w-md bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-center mb-6">Custom Questions</h2>
+                  <div className="space-y-3">
+                    <button onClick={() => setFlow("topicName")} className="w-full px-4 py-3 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Create a question</button>
+                    <button onClick={() => setFlow("prevTopics")} className="w-full px-4 py-3 rounded-md border border-white/40 hover:bg-white/10">Previous topic</button>
                   </div>
-                  <h3 className="text-2xl font-semibold mb-4">{gameStages[stageIndex]?.title}</h3>
-                  <p className="text-base mb-5 opacity-90">{gameStages[stageIndex]?.description}</p>
+                  <div className="mt-6 text-right">
+                    <button onClick={() => setFlow("mode")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : flow === "topicName" ? (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(${baseBg})` }}
+            >
+              <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
+                <form onSubmit={(e) => { e.preventDefault(); if (!currentTopicTitle.trim()) { setModeError("Please enter a topic name."); return; } setModeError(""); setItems([{ question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }]); setFlow("wizard"); }} className="mx-4 w-full max-w-lg bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-center mb-4">Create topic</h2>
+                  <label className="block text-sm mb-1">Topic name</label>
+                  <input value={currentTopicTitle} onChange={(e) => setCurrentTopicTitle(e.target.value)} placeholder="e.g., History" className="w-full mb-3 px-3 py-2 rounded-md bg-black/60 text-white border border-white/30 outline-none" />
+                  {modeError && <div className="text-red-400 text-sm mb-3" role="alert">{modeError}</div>}
+                  <div className="flex justify-between mt-2">
+                    <button type="button" onClick={() => setFlow("customEntry")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
+                    <button type="submit" className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Next</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : flow === "wizard" ? (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(${baseBg})` }}
+            >
+              <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
+                <form
+                  className="mx-4 w-full max-w-3xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm"
+                  onSubmit={(e) => { e.preventDefault(); if (wizardStep < 3) { setWizardStep(wizardStep + 1); } }}
+                >
+                  <h2 className="text-xl font-bold text-center mb-4">Write question for your topic</h2>
+                  <div className="text-sm opacity-80 mb-2">Question {wizardStep + 1} of 4</div>
+                  {persistError && <div className="text-red-400 text-sm mb-3" role="alert">{persistError}</div>}
 
-                  <div className="text-base mb-2 opacity-80">{gameStages[stageIndex]?.promptLabel}</div>
-                  <input
-                    readOnly
-                    value={gameStages[stageIndex]?.preset || ""}
-                    className="w-full mb-4 px-4 py-3 rounded-md bg-black/50 text-white text-base border border-white/30 outline-none"
-                  />
+                  <label className="block text-sm mb-1">Question</label>
                   <textarea
-                    value={answers[stageIndex]}
+                    rows={3}
+                    value={items[wizardStep].question}
                     onChange={(e) => {
                       const text = e.target.value;
-                      setAnswers((prev) => prev.map((v, i) => (i === stageIndex ? text : v)));
+                      setItems((prev) => prev.map((it, i) => (i === wizardStep ? { ...it, question: text } : it)));
                     }}
-                    placeholder={mode === "custom" ? "Type your answer here" : "Type the correctly formatted code here"}
-                    rows={10}
-                    className="w-full px-4 py-3 rounded-md bg-black/50 text-white text-base border border-white/30 outline-none"
+                    placeholder="Type your question"
+                    className="w-full mb-4 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
                   />
 
-                  <div className="mt-4 flex items-center gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    {[0,1,2].map((h) => (
+                      <div key={h} className="flex flex-col">
+                        <label className="block text-sm mb-1">Hint {h+1}</label>
+                        <input
+                          type="text"
+                          value={items[wizardStep].hints[h]}
+                          onChange={(e) => {
+                            const text = e.target.value;
+                            setItems((prev) => prev.map((it, i) => {
+                              if (i !== wizardStep) return it;
+                              const nh = [...it.hints] as [string, string, string];
+                              nh[h] = text;
+                              return { ...it, hints: nh };
+                            }));
+                          }}
+                          placeholder={`Enter hint ${h+1}`}
+                          className="w-full px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <label className="block text-sm mb-1">Answer</label>
+                  <input
+                    type="text"
+                    value={items[wizardStep].answer}
+                    onChange={(e) => setItems((prev) => prev.map((it, i) => (i === wizardStep ? { ...it, answer: e.target.value } : it)))}
+                    placeholder="Type the answer"
+                    className="w-full mb-6 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
+                  />
+
+                  <div className="flex justify-between">
                     <button
-                      className="px-5 py-2.5 rounded-md border border-white/40 text-white hover:bg-white/10"
-                      onClick={() => setStageIndex((i) => Math.max(0, i - 1))}
-                      disabled={stageIndex === 0}
                       type="button"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      className="ml-auto px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20"
                       onClick={() => {
-                        if (stageIndex < gameStages.length - 1) {
-                          setStageIndex((i) => i + 1);
+                        if (wizardStep === 0) {
+                          setFlow("topicName");
                         } else {
-                          setRunning(false);
-                          if (mode === "custom") {
-                            const mismatched = expectedAnswers.some((exp, i) => normalize(exp) !== normalize(answers[i] || ""));
-                            if (mismatched) {
-                              setResult("lose");
-                              setFlowStep("result");
-                            } else {
-                              setResult("win");
-                              setFlowStep("result");
-                            }
-                          } else {
-                            setResult("win");
-                            setFlowStep("result");
-                          }
+                          setWizardStep((s) => Math.max(0, s - 1));
                         }
                       }}
-                      type="button"
+                      className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
                     >
-                      {stageIndex < gameStages.length - 1 ? "Submit" : "Finish"}
+                      Back
                     </button>
+
+                    {wizardStep < 3 ? (
+                      <button
+                        type="submit"
+                        className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20"
+                        disabled={!items[wizardStep].question.trim() || !items[wizardStep].answer.trim()}
+                      >
+                        Next
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startGame}
+                        className="px-5 py-2.5 rounded-md bg-[--foreground] text-[--background] border border-white/0 hover:opacity-90"
+                        disabled={saving || items.some((it) => !it.question.trim() || !it.answer.trim())}
+                      >
+                        {saving ? "Saving..." : "Start"}
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : flow === "prevTopics" ? (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(${baseBg})` }}
+            >
+              <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
+                <div className="mx-4 w-full max-w-2xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-center mb-4">Previous topics</h2>
+                  {savedTopics.length === 0 ? (
+                    <div className="text-sm opacity-80">No topics saved yet.</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {savedTopics.map((t, idx) => (
+                        <li key={idx} className={`rounded-md border ${selectedTopicIndex === idx ? "border-white bg-white/10" : "border-white/20"}`}>
+                          <button onClick={() => setSelectedTopicIndex((cur) => (cur === idx ? null : idx))} className="w-full text-left px-4 py-3">
+                            <div className="font-semibold">{t.title}</div>
+                            <div className="text-sm opacity-80">{t.items.length} questions</div>
+                          </button>
+                          {selectedTopicIndex === idx && (
+                            <div className="px-4 pb-3">
+                              <div className="text-sm opacity-80 mb-2">Preview:</div>
+                              <ul className="list-disc list-inside text-sm opacity-90 space-y-1">
+                                {t.items.map((it, qi) => (
+                                  <li key={qi}>{it.question}</li>
+                                ))}
+                              </ul>
+                              <div className="mt-3 flex gap-2">
+                                <button
+                                  className="px-4 py-2 rounded-md bg-white/10 border border-white/40 hover:bg-white/20"
+                                  onClick={() => {
+                                    // load topic into wizard items (hints empty for now)
+                                    const padded = [0,1,2,3].map((i) => t.items[i] ? t.items[i] : { question: "", answer: "" });
+                                    setItems(padded.map((it) => ({ question: it.question, hints: ["", "", ""], answer: it.answer })));
+                                    setCurrentTopicTitle(t.title);
+                                    setFlow("wizard");
+                                  }}
+                                >Use this topic</button>
+                                <button
+                                  className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
+                                  onClick={async () => {
+                                    try {
+                                      await fetch(`/api/custom-questions?title=${encodeURIComponent(t.title)}`, { method: "DELETE" });
+                                      setSavedTopics((prev) => prev.filter((_, i) => i !== idx));
+                                      setSelectedTopicIndex(null);
+                                    } catch {}
+                                  }}
+                                >Delete</button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-6 text-right">
+                    <button onClick={() => setFlow("customEntry")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
                   </div>
                 </div>
-
-                {/* Right: controls */}
-                <aside className="bg-[--background]/70 border border-white/10 rounded-xl p-6 lg:p-8 text-white backdrop-blur-sm">
-                  <div className="text-base opacity-80 mb-3">Player: <span className="font-medium opacity-100">{name.trim()}</span></div>
-                  <div className="text-4xl lg:text-5xl font-bold mb-4">{formatTime(remaining)}</div>
-
-                  <div className="flex items-center gap-2 mb-4">
-                    <button
-                      className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
-                      onClick={() => setRunning(true)}
-                      type="button"
-                    >
-                      Start
-                    </button>
-                    <button
-                      className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
-                      onClick={() => setRunning(false)}
-                      type="button"
-                    >
-                      Pause
-                    </button>
-                    <button
-                      className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
-                      onClick={() => { setRunning(false); setRemaining(parsedInitialSeconds); }}
-                      type="button"
-                    >
-                      Reset
-                    </button>
-                  </div>
-
-                  <div className="text-base opacity-80 mb-3">Hints remaining: {hintsLeft}</div>
-                  <button
-                    className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10 disabled:opacity-50"
-                    onClick={() => setHintsLeft((h) => Math.max(0, h - 1))}
-                    disabled={hintsLeft <= 0}
-                    type="button"
-                  >
-                    Get hint
-                  </button>
-                </aside>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          ) : flow === "game" ? (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(${phaseBackground(stageIndex)})` }}
+            >
+              <div className="absolute" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh]">
+                {/* Header with timer */}
+                <div className="flex items-center justify-between px-6 pt-4 text-white">
+                  <div className="text-sm">Phase {stageIndex + 1} / 4</div>
+                  <div className="text-3xl font-bold">{formatTime(remaining)}</div>
+                </div>
+
+                {/* Hotspots overlay: use positions if available; otherwise show ground box */}
+                {activeHotspots ? (
+                  <div className="absolute inset-0">
+                    {/* Hint buttons on the box (right) */}
+                    {(activeHotspots?.hints || []).map((pos, i) => (
+                      <button
+                        key={`h1-${i}`}
+                        type="button"
+                        onClick={() => setOpenPanel((`hint${i+1}`) as any)}
+                        className="absolute -translate-x-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
+                        style={{ top: pos.top, left: pos.left }}
+                        aria-label={`Hint ${i+1}`}
+                        title={`Hint ${i+1}`}
+                      >
+                        <span>👁️</span>
+                      </button>
+                    ))}
+                    {/* Lock button on the door (center) */}
+                    <button
+                      type="button"
+                      onClick={() => setOpenPanel("qa")}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
+                      style={{ top: activeHotspots?.lock.top, left: activeHotspots?.lock.left }}
+                      aria-label="Question and Answer"
+                      title="Question and Answer"
+                    >
+                      <span>🔒</span>
+                    </button>
+                    {/* Next arrow appears near right-bottom when correct */}
+                    {answeredCorrect[stageIndex] && (
+                      <button
+                        type="button"
+                        onClick={goNextStage}
+                        className="absolute right-6 bottom-6 size-12 rounded-full bg-white/20 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/30"
+                        aria-label="Next phase"
+                        title="Next phase"
+                      >
+                        ➡️
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  // Default: controls box on the ground for other phases
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-6 w-[min(720px,92%)]">
+                    <div className="absolute -bottom-3 left-8 right-8 h-4 bg-black/50 blur-md rounded-full" aria-hidden="true"></div>
+                    <div className="relative rounded-xl bg-black/55 border border-white/25 backdrop-blur-sm px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.6)]">
+                      <div className="flex items-center justify-center gap-4">
+                        {["hint1", "hint2", "hint3"].map((key, i) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setOpenPanel(key as any)}
+                            className="size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
+                            aria-label={`Hint ${i+1}`}
+                            title={`Hint ${i+1}`}
+                          >
+                            <span>👁️</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setOpenPanel("qa")}
+                          className="size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
+                          aria-label="Question and Answer"
+                          title="Question and Answer"
+                        >
+                          <span>🔒</span>
+                        </button>
+                        {answeredCorrect[stageIndex] && (
+                          <button
+                            type="button"
+                            onClick={goNextStage}
+                            className="size-12 rounded-full bg-white/20 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/30"
+                            aria-label="Next phase"
+                            title="Next phase"
+                          >
+                            ➡️
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Floating panel */}
+                {openPanel && (
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-28 w-[90%] max-w-2xl text-white">
+                    <div className="bg-[--background]/95 border border-white/20 rounded-lg p-4 shadow-xl">
+                      {openPanel === "qa" ? (
+                        <div>
+                          <div className="text-sm opacity-80 mb-1">Question</div>
+                          <div className="mb-3 whitespace-pre-wrap">{items[stageIndex].question}</div>
+                          <label className="block text-sm mb-1">Your answer</label>
+                          <input
+                            type="text"
+                            value={answerInputs[stageIndex]}
+                            onChange={(e) => setAnswerInputs((prev) => prev.map((v, i) => (i === stageIndex ? e.target.value : v)))}
+                            className="w-full px-3 py-2 rounded-md bg-black/60 text-white border border-white/30 outline-none"
+                            placeholder="Type your answer"
+                          />
+                          {answerErrors[stageIndex] && (
+                            <div className="text-red-400 text-sm mt-2" role="alert">{answerErrors[stageIndex]}</div>
+                          )}
+                          <div className="mt-3 flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSubmitAnswer}
+                              className="px-4 py-2 rounded-md bg-white/10 border border-white/30 hover:bg-white/20"
+                            >
+                              Submit answer
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOpenPanel(null)}
+                              className="px-4 py-2 rounded-md border border-white/30 hover:bg-white/10"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="text-sm opacity-80 mb-1">Hint</div>
+                          <div className="whitespace-pre-wrap">{
+                            openPanel === "hint1" ? items[stageIndex].hints[0] : openPanel === "hint2" ? items[stageIndex].hints[1] : items[stageIndex].hints[2]
+                          }</div>
+                          <div className="mt-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setOpenPanel(null)}
+                              className="px-4 py-2 rounded-md border border-white/30 hover:bg-white/10"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : flow === "bad" ? (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(/images/badEnding.png)` }}
+            >
+              <div className="absolute" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
+                <div className="mx-4 w-full max-w-xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-8 text-center backdrop-blur-sm">
+                  <h2 className="text-2xl font-bold mb-2">You are dead</h2>
+                  <p className="opacity-80 mb-6">A hero never gives up</p>
+                  <div className="flex flex-col gap-3 items-center">
+                    <button onClick={restartAll} className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Restart</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
+              style={{ backgroundImage: `url(/images/goodEnding.png)` }}
+            >
+              <div className="absolute" aria-hidden="true"></div>
+              <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
+                <div className="mx-4 w-full max-w-xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-8 text-center backdrop-blur-sm">
+                  <h2 className="text-2xl font-bold mb-2">You have escaped the dungeon</h2>
+                  <div className="flex flex-col gap-3 items-center">
+                    <a href="/" className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Back to Home</a>
+                    <button onClick={restartAll} className="px-5 py-2.5 rounded-md border border-white/40 hover:bg-white/10">Play again</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        };
       </div>
     </div>
   );
 }
-
 

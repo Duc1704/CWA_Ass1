@@ -12,6 +12,7 @@ model Topic {
   id        String     @id @default(cuid())
   createdAt DateTime   @default(now())
   title     String
+  timerSeconds Int     @default(300)
   questions Question[]
 }
 

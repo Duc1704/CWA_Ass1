@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const title: string = (body?.title ?? "").toString();
     const items: Array<{ question: string; hint1?: string; hint2?: string; hint3?: string; answer: string }> = Array.isArray(body?.items) ? body.items : [];
+    const timerSeconds: number = Math.max(10, Math.min(3600, Number(body?.timerSeconds ?? 300)));
 
     if (!title.trim()) {
       return new Response(JSON.stringify({ error: "title is required" }), { status: 400 });
@@ -22,7 +23,24 @@ export async function POST(req: NextRequest) {
     const anyPrisma = prisma as any;
     // Defensive: ensure model clients exist. If not, instantiate a fresh client.
     const client: any = (!anyPrisma.topic || !anyPrisma.question) ? new PrismaClient() : anyPrisma;
-    const topic = await client.topic.create({ data: { title } });
+    let topic;
+    try {
+      topic = await client.topic.create({ data: { title, timerSeconds } });
+    } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (msg.includes("Unknown argument `timerSeconds`")) {
+        // Prisma client not regenerated yet; create without timer to avoid failing
+        console.warn("Prisma client missing timerSeconds field; creating topic without timer. Regenerate client to enable.");
+        topic = await client.topic.create({ data: { title } });
+        try {
+          await (prisma as any).$executeRawUnsafe('UPDATE "Topic" SET "timerSeconds" = ? WHERE "id" = ?', timerSeconds, topic.id);
+        } catch (rawErr) {
+          console.error('Failed to set timerSeconds via raw SQL', rawErr);
+        }
+      } else {
+        throw e;
+      }
+    }
     if (items.length > 0) {
       await client.question.createMany({
         data: items.map((it, idx) => ({
@@ -36,9 +54,18 @@ export async function POST(req: NextRequest) {
         })),
       });
     }
-    const created = await client.topic.findUnique({ where: { id: topic.id }, include: { questions: { orderBy: { orderIndex: "asc" } } } });
+    let created = await client.topic.findUnique({ where: { id: topic.id }, include: { questions: { orderBy: { orderIndex: "asc" } } } });
+    if (!(created as any)?.timerSeconds) {
+      const rows = await (prisma as any).$queryRawUnsafe(
+        'SELECT id, createdAt, title, timerSeconds FROM "Topic" WHERE id = ? LIMIT 1',
+        topic.id
+      );
+      if (rows && rows[0]) {
+        created = { ...(created as any), timerSeconds: rows[0].timerSeconds } as any;
+      }
+    }
     if (client instanceof PrismaClient) await client.$disconnect();
-    return new Response(JSON.stringify({ id: created!.id, createdAt: created!.createdAt, title: created!.title, questions: created!.questions }), { status: 201 });
+    return new Response(JSON.stringify({ id: (created as any)!.id, createdAt: (created as any)!.createdAt, title: (created as any)!.title, timerSeconds: (created as any)!.timerSeconds, questions: (created as any)!.questions }), { status: 201 });
   } catch (err) {
     console.error("POST /api/custom-questions error", err);
     const message = (err as any)?.message || "internal_error";
@@ -51,8 +78,22 @@ export async function GET() {
     const anyPrisma = prisma as any;
     const client: any = (!anyPrisma.topic || !anyPrisma.question) ? new PrismaClient() : anyPrisma;
     const topics = await client.topic.findMany({ include: { questions: { orderBy: { orderIndex: "asc" } } }, orderBy: { createdAt: "desc" } });
+    // Ensure timerSeconds is present even if the generated client is outdated
+    const withTimers = Array.isArray(topics) ? [...topics] : [];
+    if (withTimers.some((t: any) => typeof t?.timerSeconds === "undefined")) {
+      try {
+        const rows = await (prisma as any).$queryRawUnsafe('SELECT id, timerSeconds FROM "Topic"');
+        const idToTimer = new Map<string, number>();
+        (rows || []).forEach((r: any) => idToTimer.set(String(r.id), Number(r.timerSeconds)));
+        withTimers.forEach((t: any) => {
+          if (typeof t.timerSeconds === "undefined") t.timerSeconds = idToTimer.get(String(t.id));
+        });
+      } catch {
+        // ignore raw errors; UI will fall back to defaults
+      }
+    }
     if (client instanceof PrismaClient) await client.$disconnect();
-    return new Response(JSON.stringify(topics), { status: 200 });
+    return new Response(JSON.stringify(withTimers), { status: 200 });
   } catch (err) {
     console.error("GET /api/custom-questions error", err);
     const message = (err as any)?.message || "internal_error";

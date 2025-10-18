@@ -68,14 +68,14 @@ export default function EscapeRoomTab(): JSX.Element {
   const [openPanel, setOpenPanel] = useState<"qa" | "hint1" | "hint2" | "hint3" | null>(null);
 
   // Timer
-  const initialSeconds = 300;
-  const [remaining, setRemaining] = useState<number>(initialSeconds);
+  const [initialSeconds, setInitialSeconds] = useState<number>(300);
+  const [remaining, setRemaining] = useState<number>(300);
   const [running, setRunning] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [persistError, setPersistError] = useState<string>("");
 
   // Saved topics fetched from API when needed
-  const [savedTopics, setSavedTopics] = useState<Array<{ title: string; items: { question: string; answer: string }[] }>>([]);
+  const [savedTopics, setSavedTopics] = useState<Array<{ title: string; timerSeconds: number; items: { question: string; answer: string; hints: [string, string, string] }[] }>>([]);
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -116,6 +116,7 @@ export default function EscapeRoomTab(): JSX.Element {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: currentTopicTitle.trim() || "Untitled",
+          timerSeconds: initialSeconds,
           items: items.map((it) => ({
             question: it.question,
             hint1: it.hints[0] || undefined,
@@ -141,6 +142,23 @@ export default function EscapeRoomTab(): JSX.Element {
     setAnsweredCorrect([false, false, false, false]);
     setOpenPanel(null);
     setRemaining(initialSeconds);
+    setFlow("game");
+    setRunning(true);
+  };
+
+  // Start game immediately without persisting to the database (used for Previous topic)
+  const startGameImmediate = (itemsData: WizardItem[], seconds: number) => {
+    const secs = Math.max(10, Math.min(3600, Number(seconds) || 300));
+    setItems(itemsData);
+    setPersistError("");
+    setSaving(false);
+    setStageIndex(0);
+    setAnswerInputs(new Array(itemsData.length).fill(""));
+    setAnswerErrors(new Array(itemsData.length).fill(""));
+    setAnsweredCorrect(new Array(itemsData.length).fill(false));
+    setOpenPanel(null);
+    setInitialSeconds(secs);
+    setRemaining(secs);
     setFlow("game");
     setRunning(true);
   };
@@ -190,9 +208,11 @@ export default function EscapeRoomTab(): JSX.Element {
         const topics = Array.isArray(data) ? data : [];
         const mapped = topics.map((t: any) => ({
           title: String(t?.title ?? ""),
+          timerSeconds: Number(t?.timerSeconds ?? 300) || 300,
           items: (Array.isArray(t?.questions) ? t.questions : []).map((q: any) => ({
             question: String(q?.prompt ?? ""),
             answer: String(q?.answer ?? ""),
+            hints: [String(q?.hint1 ?? ""), String(q?.hint2 ?? ""), String(q?.hint3 ?? "")],
           })),
         })).filter((t: any) => t.title);
         setSavedTopics(mapped);
@@ -294,7 +314,20 @@ export default function EscapeRoomTab(): JSX.Element {
                   onSubmit={(e) => { e.preventDefault(); if (wizardStep < 3) { setWizardStep(wizardStep + 1); } }}
                 >
                   <h2 className="text-xl font-bold text-center mb-4">Write question for your topic</h2>
-                  <div className="text-sm opacity-80 mb-2">Question {wizardStep + 1} of 4</div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm opacity-80">Question {wizardStep + 1} of 4</div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm opacity-80">Timer (s)</label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={3600}
+                        value={initialSeconds}
+                        onChange={(e) => setInitialSeconds(Math.max(10, Math.min(3600, Number(e.target.value) || 10)))}
+                        className="w-28 px-2 py-1 rounded-md bg-black/60 text-white border border-white/30 outline-none"
+                      />
+                    </div>
+                  </div>
                   {persistError && <div className="text-red-400 text-sm mb-3" role="alert">{persistError}</div>}
 
                   <label className="block text-sm mb-1">Question</label>
@@ -409,11 +442,11 @@ export default function EscapeRoomTab(): JSX.Element {
                                 <button
                                   className="px-4 py-2 rounded-md bg-white/10 border border-white/40 hover:bg-white/20"
                                   onClick={() => {
-                                    // load topic into wizard items (hints empty for now)
-                                    const padded = [0,1,2,3].map((i) => t.items[i] ? t.items[i] : { question: "", answer: "" });
-                                    setItems(padded.map((it) => ({ question: it.question, hints: ["", "", ""], answer: it.answer })));
+                                    const padded = [0,1,2,3].map((i) => t.items[i] ? t.items[i] : { question: "", answer: "", hints: ["", "", ""] as [string,string,string] });
+                                    const itemsData: WizardItem[] = padded.map((it) => ({ question: it.question, hints: it.hints, answer: it.answer }));
+                                    const secs = Math.max(10, Math.min(3600, Number(t.timerSeconds || 300)));
                                     setCurrentTopicTitle(t.title);
-                                    setFlow("wizard");
+                                    startGameImmediate(itemsData, secs);
                                   }}
                                 >Use this topic</button>
                                 <button
@@ -446,10 +479,29 @@ export default function EscapeRoomTab(): JSX.Element {
             >
               <div className="absolute" aria-hidden="true"></div>
               <div className="relative z-10 w-full min-h-[80vh]">
-                {/* Header with timer */}
-                <div className="flex items-center justify-between px-6 pt-4 text-white">
-                  <div className="text-sm">Phase {stageIndex + 1} / 4</div>
-                  <div className="text-3xl font-bold">{formatTime(remaining)}</div>
+                {/* Floating timer cluster (top-left) */}
+                <div className="absolute top-4 left-4 z-10 text-white select-none">
+                  <div className="flex items-center gap-3">
+                    {/* Circular timer */}
+                    <div className="relative">
+                      <div className="size-[104px] rounded-full bg-black/50 ring-4 ring-white/80 flex flex-col items-center justify-center shadow-xl">
+                        <div className="text-sm tracking-[0.2em] opacity-90 mb-0.5">TIME</div>
+                        <div className="text-3xl font-extrabold tabular-nums">{formatTime(remaining)}</div>
+                      </div>
+                      {/* Decorative red arc */}
+                      <div className="absolute inset-0 rounded-full border-[10px] border-transparent border-t-red-500 border-l-red-500 rotate-[-45deg] pointer-events-none"></div>
+                    </div>
+                    {/* Pause/Resume circular button */}
+                    <button
+                      type="button"
+                      onClick={() => setRunning((r) => !r)}
+                      className="size-12 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/80 flex items-center justify-center text-white hover:bg-white/30 shadow-lg"
+                      aria-label={running ? "Pause timer" : "Resume timer"}
+                      title={running ? "Pause" : "Resume"}
+                    >
+                      <span className="text-xl font-bold leading-none">{running ? "Ⅱ" : "▶"}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Hotspots overlay: use positions if available; otherwise show ground box */}
@@ -538,58 +590,105 @@ export default function EscapeRoomTab(): JSX.Element {
 
                 {/* Floating panel */}
                 {openPanel && (
-                  <div className="absolute left-1/2 -translate-x-1/2 bottom-28 w-[90%] max-w-2xl text-white">
-                    <div className="bg-[--background]/95 border border-white/20 rounded-lg p-4 shadow-xl">
-                      {openPanel === "qa" ? (
-                        <div>
-                          <div className="text-sm opacity-80 mb-1">Question</div>
-                          <div className="mb-3 whitespace-pre-wrap">{items[stageIndex].question}</div>
-                          <label className="block text-sm mb-1">Your answer</label>
-                          <input
-                            type="text"
-                            value={answerInputs[stageIndex]}
-                            onChange={(e) => setAnswerInputs((prev) => prev.map((v, i) => (i === stageIndex ? e.target.value : v)))}
-                            className="w-full px-3 py-2 rounded-md bg-black/60 text-white border border-white/30 outline-none"
-                            placeholder="Type your answer"
-                          />
-                          {answerErrors[stageIndex] && (
-                            <div className="text-red-400 text-sm mt-2" role="alert">{answerErrors[stageIndex]}</div>
-                          )}
-                          <div className="mt-3 flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={handleSubmitAnswer}
-                              className="px-4 py-2 rounded-md bg-white/10 border border-white/30 hover:bg-white/20"
-                            >
-                              Submit answer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setOpenPanel(null)}
-                              className="px-4 py-2 rounded-md border border-white/30 hover:bg-white/10"
-                            >
-                              Close
-                            </button>
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-10 z-30 pointer-events-auto">
+                    {openPanel === "qa" ? (
+                      <div
+                        className="relative inline-block shadow-2xl"
+                        style={{ width: 'min(98vw, 1400px)' }}
+                      >
+                        {/* Paper look: use oldPaper as background. Inputs are dark-on-light to match. */}
+                        <div
+                          className="relative"
+                          style={{
+                            width: 'min(98vw, 1400px)',
+                            minHeight: 'min(82vh, 820px)',
+                            backgroundImage: 'url(/images/oldPaper.png)',
+                            backgroundSize: 'contain',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'center',
+                          }}
+                        >
+
+                          {/* Content inside paper margins */}
+                          <div className="absolute inset-0 pt-16 pb-12 text-black flex items-start justify-center px-[6%] sm:px-[8%]">
+                            <div className="mx-auto" style={{ width: 'min(860px, 45%)' }}>
+                              <div className="text-xl font-semibold mb-3">Question</div>
+                              <div className="mb-4 whitespace-pre-wrap text-[15px] leading-relaxed bg-white/70 border border-black/10 rounded-md p-3 w-full">{items[stageIndex].question}</div>
+                              <label className="block text-sm mb-1">Your answer</label>
+                              <input
+                                type="text"
+                                value={answerInputs[stageIndex]}
+                                onChange={(e) => setAnswerInputs((prev) => prev.map((v, i) => (i === stageIndex ? e.target.value : v)))}
+                                className="w-full px-3 py-2 rounded-md bg-white/85 text-black border border-black/20 outline-none placeholder:text-black/60 focus:ring-2 focus:ring-purple-300"
+                                placeholder="Type your answer"
+                              />
+                              {answerErrors[stageIndex] && (
+                                <div className="text-red-700 text-sm mt-2" role="alert">{answerErrors[stageIndex]}</div>
+                              )}
+                              <div className="mt-4 flex items-center justify-between gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenPanel(null)}
+                                  className="px-4 py-2 rounded-md border border-black/30 bg-white/70 hover:bg-white/80 text-black"
+                                >
+                                  Close
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleSubmitAnswer}
+                                  className="px-5 py-2 rounded-md bg-purple-500 text-white hover:bg-purple-600 shadow"
+                                >
+                                  Submit
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      ) : (
-                        <div>
-                          <div className="text-sm opacity-80 mb-1">Hint</div>
-                          <div className="whitespace-pre-wrap">{
-                            openPanel === "hint1" ? items[stageIndex].hints[0] : openPanel === "hint2" ? items[stageIndex].hints[1] : items[stageIndex].hints[2]
-                          }</div>
-                          <div className="mt-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setOpenPanel(null)}
-                              className="px-4 py-2 rounded-md border border-white/30 hover:bg-white/10"
-                            >
-                              Close
-                            </button>
+                      </div>
+                    ) : (
+                      <div
+                        className="relative inline-block shadow-2xl"
+                        style={{ width: 'min(98vw, 1400px)' }}
+                      >
+                        <div
+                          className="relative"
+                          style={{
+                            width: 'min(98vw, 1400px)',
+                            minHeight: 'min(82vh, 820px)',
+                            backgroundImage: 'url(/images/oldPaper.png)',
+                            backgroundSize: 'contain',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'center',
+                          }}
+                        >
+                          <div className="absolute inset-0 pt-16 pb-12 text-black flex items-start justify-center px-[6%] sm:px-[8%]">
+                            <div className="mx-auto" style={{ width: 'min(860px, 45%)' }}>
+                              <div className="text-xl font-semibold mb-3">Hint</div>
+                              <div className="whitespace-pre-wrap text-[15px] leading-relaxed bg-white/70 border border-black/10 rounded-md p-3 w-full">{openPanel === "hint1" ? items[stageIndex].hints[0] : openPanel === "hint2" ? items[stageIndex].hints[1] : items[stageIndex].hints[2]}</div>
+                              <div className="mt-4 flex items-center justify-start gap-3">
+                                <button type="button" onClick={() => setOpenPanel(null)} className="px-4 py-2 rounded-md border border-black/30 bg-white/70 hover:bg-white/80 text-black">Close</button>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Fullscreen pause overlay */}
+                {!running && flow === "game" && (
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
+                    <button
+                      type="button"
+                      onClick={() => setRunning(true)}
+                      className="w-40 h-40 rounded-full bg-white/15 border-4 border-white/80 flex items-center justify-center hover:bg-white/25 shadow-2xl"
+                      aria-label="Resume game"
+                    >
+                      <span className="text-5xl">▶</span>
+                    </button>
+                    <div className="mt-6 text-2xl font-semibold">GAME HAS BEEN PAUSED</div>
+                    <div className="mt-2 text-sm opacity-80">Press the button to resume</div>
                   </div>
                 )}
               </div>

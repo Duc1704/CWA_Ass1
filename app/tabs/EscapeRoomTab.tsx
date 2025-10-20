@@ -1,49 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-
-type WizardItem = {
-  question: string;
-  hints: [string, string, string];
-  answer: string;
-};
+import { TimerOverlay, ControlsBox, HotspotsOverlay, PhaseImage, ModeLanding, TopicNameForm, PrevTopicsList, WizardForm } from "../tabs/escape-room/components";
+import useTimer from "../hooks/useTimer";
+import useEscapeRoomState from "../hooks/useEscapeRoomState";
+import { getTopics, createTopic, deleteTopic } from "../services/customQuestionsClient";
+import { WizardItem, Flow } from "../types/escapeRoom";
+import { PHASE_HOTSPOTS } from "../constants/hotspots";
 
 export default function EscapeRoomTab(): JSX.Element {
   const baseBg = useMemo(() => "/images/backGround.png", []);
-  // Editable hotspot positions per phase (percentages). Adjust here to move buttons.
-  // Example: { top: "42%", left: "50%" }
-  const PHASE_HOTSPOTS = useMemo(() => ({
-    0: {
-      hints: [
-        { top: "75%", left: "72%" },
-        { top: "66%", left: "20%" },
-        { top: "66%", left: "82%" },
-      ],
-      lock: { top: "50%", left: "28%" },
-    },
-    1: {
-      hints: [
-        { top: "70%", left: "70%" },
-        { top: "65%", left: "40%" },
-        { top: "90%", left: "20%" },
-      ],
-      lock: { top: "45%", left: "50%" },
-    },
-    2: {
-      hints: [
-        { top: "75%", left: "60%" },
-        { top: "47%", left: "25%" },
-        { top: "64%", left: "80%" },
-      ],
-      lock: { top: "50%", left: "46%" },
-    },
-    3: {
-      hints: [
-        { top: "80%", left: "70%" },
-        { top: "75%", left: "13%" },
-        { top: "66%", left: "40%" },
-      ],
-      lock: { top: "53%", left: "51%" },
-    },
-  } as Record<number, { hints: Array<{ top: string; left: string }>; lock: { top: string; left: string } }>), []);
 
   // Wizard for 4 questions
   const [wizardStep, setWizardStep] = useState<number>(0); // 0..3
@@ -54,23 +18,24 @@ export default function EscapeRoomTab(): JSX.Element {
     { question: "", hints: ["", "", ""], answer: "" },
   ]);
 
-  type Flow = "mode" | "customEntry" | "topicName" | "wizard" | "prevTopics" | "game" | "bad" | "good";
   const [flow, setFlow] = useState<Flow>("mode");
   const [mode, setMode] = useState<"default" | "custom" | "">("");
   const [currentTopicTitle, setCurrentTopicTitle] = useState<string>("");
   const [modeError, setModeError] = useState<string>("");
 
   // Game state
-  const [stageIndex, setStageIndex] = useState<number>(0); // 0..3
-  const [answerInputs, setAnswerInputs] = useState<string[]>(["", "", "", ""]);
-  const [answerErrors, setAnswerErrors] = useState<string[]>(["", "", "", ""]);
-  const [answeredCorrect, setAnsweredCorrect] = useState<boolean[]>([false, false, false, false]);
-  const [openPanel, setOpenPanel] = useState<"qa" | "hint1" | "hint2" | "hint3" | null>(null);
+  const {
+    stageIndex, setStageIndex,
+    openPanel, setOpenPanel,
+    answerInputs, setAnswerInputs,
+    answerErrors, setAnswerErrors,
+    answeredCorrect, setAnsweredCorrect,
+    submitAnswer,
+  } = useEscapeRoomState();
 
   // Timer
   const [initialSeconds, setInitialSeconds] = useState<number>(300);
-  const [remaining, setRemaining] = useState<number>(300);
-  const [running, setRunning] = useState<boolean>(false);
+  const { remaining, running, setRunning, setRemaining } = useTimer(300);
   const [saving, setSaving] = useState<boolean>(false);
   const [persistError, setPersistError] = useState<string>("");
 
@@ -78,13 +43,7 @@ export default function EscapeRoomTab(): JSX.Element {
   const [savedTopics, setSavedTopics] = useState<Array<{ title: string; timerSeconds: number; items: { question: string; answer: string; hints: [string, string, string] }[] }>>([]);
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => {
-      setRemaining((prev) => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [running]);
+  useEffect(() => { setRemaining(initialSeconds); }, [initialSeconds, setRemaining]);
 
   useEffect(() => {
     if (flow === "game" && remaining === 0) {
@@ -111,25 +70,17 @@ export default function EscapeRoomTab(): JSX.Element {
     setPersistError("");
     setSaving(true);
     try {
-      const res = await fetch("/api/custom-questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: currentTopicTitle.trim() || "Untitled",
-          timerSeconds: initialSeconds,
-          items: items.map((it) => ({
-            question: it.question,
-            hint1: it.hints[0] || undefined,
-            hint2: it.hints[1] || undefined,
-            hint3: it.hints[2] || undefined,
-            answer: it.answer,
-          })),
-        }),
+      await createTopic({
+        title: currentTopicTitle.trim() || "Untitled",
+        timerSeconds: initialSeconds,
+        items: items.map((it) => ({
+          question: it.question,
+          hint1: it.hints[0] || undefined,
+          hint2: it.hints[1] || undefined,
+          hint3: it.hints[2] || undefined,
+          answer: it.answer,
+        })),
       });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || "Failed to save topic");
-      }
     } catch (e: any) {
       setPersistError(e?.message || "Failed to save topic");
       setSaving(false);
@@ -201,8 +152,7 @@ export default function EscapeRoomTab(): JSX.Element {
   useEffect(() => {
     if (flow !== "prevTopics") return;
     let cancelled = false;
-    fetch("/api/custom-questions")
-      .then((r) => (r.ok ? r.json() : []))
+    getTopics()
       .then((data) => {
         if (cancelled) return;
         const topics = Array.isArray(data) ? data : [];
@@ -249,19 +199,10 @@ export default function EscapeRoomTab(): JSX.Element {
       <div className="relative w-screen max-w-none ml-[calc(50%-50vw)] mr-[calc(50%-50vw)] px-4 sm:px-6 py-4">
         {
           flow === "mode" ? (
-            <div
-              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
-              style={{ backgroundImage: `url(${baseBg})` }}
-            >
+            <div className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden" style={{ backgroundImage: `url(${baseBg})` }}>
               <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
               <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
-                <div className="mx-4 w-full max-w-xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
-                  <h2 className="text-xl font-bold text-center mb-6">Escape Room</h2>
-                  <div className="space-y-3">
-                    <button onClick={() => setFlow("topicName")} className="w-full px-4 py-3 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Create a question</button>
-                    <button onClick={() => setFlow("prevTopics")} className="w-full px-4 py-3 rounded-md border border-white/40 hover:bg-white/10">Previous topic</button>
-                  </div>
-                </div>
+                <ModeLanding onCreateQuestion={() => setFlow("topicName")} onPrevTopics={() => setFlow("prevTopics")} />
               </div>
             </div>
           ) : flow === "customEntry" ? (
@@ -284,308 +225,69 @@ export default function EscapeRoomTab(): JSX.Element {
               </div>
             </div>
           ) : flow === "topicName" ? (
-            <div
-              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
-              style={{ backgroundImage: `url(${baseBg})` }}
-            >
+            <div className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden" style={{ backgroundImage: `url(${baseBg})` }}>
               <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
               <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
-                <form onSubmit={(e) => { e.preventDefault(); if (!currentTopicTitle.trim()) { setModeError("Please enter a topic name."); return; } setModeError(""); setItems([{ question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }]); setFlow("wizard"); }} className="mx-4 w-full max-w-lg bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
-                  <h2 className="text-xl font-bold text-center mb-4">Create topic</h2>
-                  <label className="block text-sm mb-1">Topic name</label>
-                  <input value={currentTopicTitle} onChange={(e) => setCurrentTopicTitle(e.target.value)} placeholder="e.g., History" className="w-full mb-3 px-3 py-2 rounded-md bg-black/60 text-white border border-white/30 outline-none" />
-                  {modeError && <div className="text-red-400 text-sm mb-3" role="alert">{modeError}</div>}
-                  <div className="flex justify-between mt-2">
-                    <button type="button" onClick={() => setFlow("customEntry")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
-                    <button type="submit" className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20">Next</button>
-                  </div>
-                </form>
+                <TopicNameForm
+                  value={currentTopicTitle}
+                  onChange={(v) => setCurrentTopicTitle(v)}
+                  onBack={() => setFlow("customEntry")}
+                  onNext={() => { if (!currentTopicTitle.trim()) { setModeError("Please enter a topic name."); return; } setModeError(""); setItems([{ question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }, { question: "", hints: ["", "", ""], answer: "" }]); setFlow("wizard"); }}
+                  error={modeError}
+                />
               </div>
             </div>
           ) : flow === "wizard" ? (
-            <div
-              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
-              style={{ backgroundImage: `url(${baseBg})` }}
-            >
+            <div className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden" style={{ backgroundImage: `url(${baseBg})` }}>
               <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
               <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
-                <form
-                  className="mx-4 w-full max-w-3xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm"
-                  onSubmit={(e) => { e.preventDefault(); if (wizardStep < 3) { setWizardStep(wizardStep + 1); } }}
-                >
-                  <h2 className="text-xl font-bold text-center mb-4">Write question for your topic</h2>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm opacity-80">Question {wizardStep + 1} of 4</div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm opacity-80">Timer (s)</label>
-                      <input
-                        type="number"
-                        min={10}
-                        max={3600}
-                        value={initialSeconds}
-                        onChange={(e) => setInitialSeconds(Math.max(10, Math.min(3600, Number(e.target.value) || 10)))}
-                        className="w-28 px-2 py-1 rounded-md bg-black/60 text-white border border-white/30 outline-none"
-                      />
-                    </div>
-                  </div>
-                  {persistError && <div className="text-red-400 text-sm mb-3" role="alert">{persistError}</div>}
-
-                  <label className="block text-sm mb-1">Question</label>
-                  <textarea
-                    rows={3}
-                    value={items[wizardStep].question}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      setItems((prev) => prev.map((it, i) => (i === wizardStep ? { ...it, question: text } : it)));
-                    }}
-                    placeholder="Type your question"
-                    className="w-full mb-4 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
-                  />
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                    {[0,1,2].map((h) => (
-                      <div key={h} className="flex flex-col">
-                        <label className="block text-sm mb-1">Hint {h+1}</label>
-                        <input
-                          type="text"
-                          value={items[wizardStep].hints[h]}
-                          onChange={(e) => {
-                            const text = e.target.value;
-                            setItems((prev) => prev.map((it, i) => {
-                              if (i !== wizardStep) return it;
-                              const nh = [...it.hints] as [string, string, string];
-                              nh[h] = text;
-                              return { ...it, hints: nh };
-                            }));
-                          }}
-                          placeholder={`Enter hint ${h+1}`}
-                          className="w-full px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <label className="block text-sm mb-1">Answer</label>
-                  <input
-                    type="text"
-                    value={items[wizardStep].answer}
-                    onChange={(e) => setItems((prev) => prev.map((it, i) => (i === wizardStep ? { ...it, answer: e.target.value } : it)))}
-                    placeholder="Type the answer"
-                    className="w-full mb-6 px-3 py-2 rounded-md bg-black/60 text-white placeholder:text-white/70 border border-white/30 focus:border-white focus:ring-2 focus:ring-white/30 outline-none"
-                  />
-
-                  <div className="flex justify-between">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (wizardStep === 0) {
-                          setFlow("topicName");
-                        } else {
-                          setWizardStep((s) => Math.max(0, s - 1));
-                        }
-                      }}
-                      className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
-                    >
-                      Back
-                    </button>
-
-                    {wizardStep < 3 ? (
-                      <button
-                        type="submit"
-                        className="px-5 py-2.5 rounded-md bg-white/10 border border-white/40 hover:bg-white/20"
-                        disabled={!items[wizardStep].question.trim() || !items[wizardStep].answer.trim()}
-                      >
-                        Next
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={startGame}
-                        className="px-5 py-2.5 rounded-md bg-[--foreground] text-[--background] border border-white/0 hover:opacity-90"
-                        disabled={saving || items.some((it) => !it.question.trim() || !it.answer.trim())}
-                      >
-                        {saving ? "Saving..." : "Start"}
-                      </button>
-                    )}
-                  </div>
-                </form>
+                <WizardForm
+                  items={items}
+                  step={wizardStep}
+                  timerSeconds={initialSeconds}
+                  error={persistError}
+                  onTimerChange={(n) => setInitialSeconds(n)}
+                  onChangeItem={(idx, item) => setItems((prev) => prev.map((it, i) => (i === idx ? item : it)))}
+                  onBack={() => { if (wizardStep === 0) setFlow("topicName"); else setWizardStep((s) => Math.max(0, s - 1)); }}
+                  onNext={() => { if (wizardStep < items.length - 1) setWizardStep((s) => s + 1); }}
+                  onFinish={startGame}
+                />
               </div>
             </div>
           ) : flow === "prevTopics" ? (
-            <div
-              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
-              style={{ backgroundImage: `url(${baseBg})` }}
-            >
+            <div className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden" style={{ backgroundImage: `url(${baseBg})` }}>
               <div className="absolute inset-0 bg-black/70" aria-hidden="true"></div>
               <div className="relative z-10 w-full min-h-[80vh] grid place-items-center">
-                <div className="mx-4 w-full max-w-2xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
-                  <h2 className="text-xl font-bold text-center mb-4">Previous topics</h2>
-                  {savedTopics.length === 0 ? (
-                    <div className="text-sm opacity-80">No topics saved yet.</div>
-                  ) : (
-                    <ul className="space-y-2">
-                      {savedTopics.map((t, idx) => (
-                        <li key={idx} className={`rounded-md border ${selectedTopicIndex === idx ? "border-white bg-white/10" : "border-white/20"}`}>
-                          <button onClick={() => setSelectedTopicIndex((cur) => (cur === idx ? null : idx))} className="w-full text-left px-4 py-3">
-                            <div className="font-semibold">{t.title}</div>
-                            <div className="text-sm opacity-80">{t.items.length} questions</div>
-                          </button>
-                          {selectedTopicIndex === idx && (
-                            <div className="px-4 pb-3">
-                              <div className="text-sm opacity-80 mb-2">Preview:</div>
-                              <ul className="list-disc list-inside text-sm opacity-90 space-y-1">
-                                {t.items.map((it, qi) => (
-                                  <li key={qi}>{it.question}</li>
-                                ))}
-                              </ul>
-                              <div className="mt-3 flex gap-2">
-                                <button
-                                  className="px-4 py-2 rounded-md bg-white/10 border border-white/40 hover:bg-white/20"
-                                  onClick={() => {
-                                    const padded = [0,1,2,3].map((i) => t.items[i] ? t.items[i] : { question: "", answer: "", hints: ["", "", ""] as [string,string,string] });
-                                    const itemsData: WizardItem[] = padded.map((it) => ({ question: it.question, hints: it.hints, answer: it.answer }));
-                                    const secs = Math.max(10, Math.min(3600, Number(t.timerSeconds || 300)));
-                                    setCurrentTopicTitle(t.title);
-                                    startGameImmediate(itemsData, secs);
-                                  }}
-                                >Use this topic</button>
-                                <button
-                                  className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10"
-                                  onClick={async () => {
-                                    try {
-                                      await fetch(`/api/custom-questions?title=${encodeURIComponent(t.title)}`, { method: "DELETE" });
-                                      setSavedTopics((prev) => prev.filter((_, i) => i !== idx));
-                                      setSelectedTopicIndex(null);
-                                    } catch {}
-                                  }}
-                                >Delete</button>
-                              </div>
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="mt-6 text-right">
-                    <button onClick={() => setFlow("customEntry")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
-                  </div>
+                <PrevTopicsList
+                  topics={savedTopics}
+                  selectedIndex={selectedTopicIndex}
+                  onSelect={(idx) => setSelectedTopicIndex((cur) => (cur === idx ? null : idx))}
+                  onUse={(t) => { const padded = [0,1,2,3].map((i) => t.items[i] ? t.items[i] : { question: "", answer: "", hints: ["", "", ""] as [string,string,string] }); const itemsData = padded.map((it) => ({ question: it.question, hints: it.hints, answer: it.answer })); const secs = Math.max(10, Math.min(3600, Number((t as any).timerSeconds || 300))); setCurrentTopicTitle(t.title); startGameImmediate(itemsData, secs); }}
+                  onDelete={async (t) => { try { await deleteTopic(t.title); setSavedTopics((prev) => prev.filter((x) => x.title !== t.title)); setSelectedTopicIndex(null); } catch {} }}
+                />
+                <div className="mt-6 text-right w-full max-w-2xl px-6">
+                  <button onClick={() => setFlow("customEntry")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
                 </div>
               </div>
             </div>
           ) : flow === "game" ? (
-            <div
-              className="relative min-h-[80vh] bg-center bg-cover bg-no-repeat rounded-xl border border-[--foreground]/20 overflow-hidden"
-              style={{ backgroundImage: `url(${phaseBackground(stageIndex)})` }}
-            >
-              <div className="absolute" aria-hidden="true"></div>
-              <div className="relative z-10 w-full min-h-[80vh]">
-                {/* Floating timer cluster (top-left) */}
-                <div className="absolute top-4 left-4 z-10 text-white select-none">
-                  <div className="flex items-center gap-3">
-                    {/* Circular timer */}
-                    <div className="relative">
-                      <div className="size-[104px] rounded-full bg-black/50 ring-4 ring-white/80 flex flex-col items-center justify-center shadow-xl">
-                        <div className="text-sm tracking-[0.2em] opacity-90 mb-0.5">TIME</div>
-                        <div className="text-3xl font-extrabold tabular-nums">{formatTime(remaining)}</div>
-                      </div>
-                      {/* Decorative red arc */}
-                      <div className="absolute inset-0 rounded-full border-[10px] border-transparent border-t-red-500 border-l-red-500 rotate-[-45deg] pointer-events-none"></div>
-                    </div>
-                    {/* Pause/Resume circular button */}
-                    <button
-                      type="button"
-                      onClick={() => setRunning((r) => !r)}
-                      className="size-12 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/80 flex items-center justify-center text-white hover:bg-white/30 shadow-lg"
-                      aria-label={running ? "Pause timer" : "Resume timer"}
-                      title={running ? "Pause" : "Resume"}
-                    >
-                      <span className="text-xl font-bold leading-none">{running ? "Ⅱ" : "▶"}</span>
-                    </button>
-                  </div>
-                </div>
+            <div className="relative min-h-[80vh] rounded-xl border border-[--foreground]/20 overflow-hidden">
+              <PhaseImage src={phaseBackground(stageIndex)} />
+              <div className="absolute inset-0">
+                <TimerOverlay remaining={remaining} running={running} formatTime={formatTime} onToggle={() => setRunning((r) => !r)} />
 
                 {/* Hotspots overlay: use positions if available; otherwise show ground box */}
                 {activeHotspots ? (
-                  <div className="absolute inset-0">
-                    {/* Hint buttons on the box (right) */}
-                    {(activeHotspots?.hints || []).map((pos, i) => (
-                      <button
-                        key={`h1-${i}`}
-                        type="button"
-                        onClick={() => setOpenPanel((`hint${i+1}`) as any)}
-                        className="absolute -translate-x-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
-                        style={{ top: pos.top, left: pos.left }}
-                        aria-label={`Hint ${i+1}`}
-                        title={`Hint ${i+1}`}
-                      >
-                        <span>👁️</span>
-                      </button>
-                    ))}
-                    {/* Lock button on the door (center) */}
-                    <button
-                      type="button"
-                      onClick={() => setOpenPanel("qa")}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
-                      style={{ top: activeHotspots?.lock.top, left: activeHotspots?.lock.left }}
-                      aria-label="Question and Answer"
-                      title="Question and Answer"
-                    >
-                      <span>🔒</span>
-                    </button>
-                    {/* Next arrow appears near right-bottom when correct */}
-                    {answeredCorrect[stageIndex] && (
-                      <button
-                        type="button"
-                        onClick={goNextStage}
-                        className="absolute right-6 bottom-6 size-12 rounded-full bg-white/20 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/30"
-                        aria-label="Next phase"
-                        title="Next phase"
-                      >
-                        ➡️
-                      </button>
-                    )}
-                  </div>
+                  <HotspotsOverlay
+                    hints={activeHotspots.hints}
+                    lock={activeHotspots.lock}
+                    onOpenHint={(i) => setOpenPanel((`hint${i+1}`) as any)}
+                    onOpenQA={() => setOpenPanel("qa")}
+                    canNext={answeredCorrect[stageIndex]}
+                    onNext={goNextStage}
+                  />
                 ) : (
-                  // Default: controls box on the ground for other phases
-                  <div className="absolute left-1/2 -translate-x-1/2 bottom-6 w-[min(720px,92%)]">
-                    <div className="absolute -bottom-3 left-8 right-8 h-4 bg-black/50 blur-md rounded-full" aria-hidden="true"></div>
-                    <div className="relative rounded-xl bg-black/55 border border-white/25 backdrop-blur-sm px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.6)]">
-                      <div className="flex items-center justify-center gap-4">
-                        {["hint1", "hint2", "hint3"].map((key, i) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setOpenPanel(key as any)}
-                            className="size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
-                            aria-label={`Hint ${i+1}`}
-                            title={`Hint ${i+1}`}
-                          >
-                            <span>👁️</span>
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => setOpenPanel("qa")}
-                          className="size-12 rounded-full bg-white/15 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/25"
-                          aria-label="Question and Answer"
-                          title="Question and Answer"
-                        >
-                          <span>🔒</span>
-                        </button>
-                        {answeredCorrect[stageIndex] && (
-                          <button
-                            type="button"
-                            onClick={goNextStage}
-                            className="size-12 rounded-full bg-white/20 border border-white/40 text-white text-xl flex items-center justify-center hover:bg-white/30"
-                            aria-label="Next phase"
-                            title="Next phase"
-                          >
-                            ➡️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <ControlsBox onOpenPanel={(k) => setOpenPanel(k)} canNext={answeredCorrect[stageIndex]} onNext={goNextStage} />
                 )}
 
                 {/* Floating panel */}

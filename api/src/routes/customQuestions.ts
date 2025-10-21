@@ -2,7 +2,9 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: { db: { url: String(process.env.DATABASE_URL || "file:./prisma/dev.db") } }
+});
 
 router.get("/", async (_req, res) => {
   try {

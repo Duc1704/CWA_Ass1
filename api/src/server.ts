@@ -7,10 +7,10 @@ import { resolve } from "path";
 // Ensure env loads from api/.env regardless of CWD
 dotenv.config({ path: resolve(__dirname, "../.env") });
 
-// Ensure SQLite path is absolute to avoid EBUSY/ENOENT when CWD differs
-const absoluteDbPath = resolve(__dirname, "../prisma/dev.db");
-if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith("file:./")) {
-  process.env.DATABASE_URL = `file:${absoluteDbPath}`;
+// Point DATABASE_URL to prisma/dev.db (previous data) if not explicitly set
+const prismaDbPath = resolve(__dirname, "../prisma/dev.db");
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith("file:")) {
+  process.env.DATABASE_URL = `file:${prismaDbPath}`;
 }
 
 const app = express();

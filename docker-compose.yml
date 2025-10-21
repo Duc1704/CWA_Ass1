@@ -1,0 +1,33 @@
+services:
+  api:
+    image: node:20
+    working_dir: /app
+    environment:
+      - NODE_ENV=development
+      - PORT=4002
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    command: sh -c "npm ci && npm run dev"
+    ports:
+      - "4002:4002"   # API (Express)
+      - "80:3000"     # Frontend (Next.js) via shared network namespace
+      - "4080:3000"
+    restart: unless-stopped
+
+  frontend:
+    image: node:20
+    working_dir: /app
+    environment:
+      - NODE_ENV=development
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm ci && npm run dev"
+    depends_on:
+      - api
+    # Share the API container's network namespace so frontend can reach http://localhost:4002
+    network_mode: "service:api"
+    restart: unless-stopped

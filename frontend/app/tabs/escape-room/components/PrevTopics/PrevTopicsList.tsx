@@ -1,4 +1,5 @@
 import React from "react";
+import GenerateHtmlInlineButton from "./GenerateHtmlInlineButton";
 
 type Item = { question: string; answer: string; hints: [string, string, string] };
 type Topic = { title: string; items: Item[]; timerSeconds: number };
@@ -9,9 +10,11 @@ type Props = {
   onSelect: (idx: number) => void;
   onUse: (topic: Topic) => void;
   onDelete: (topic: Topic) => void;
+  onGenerate?: (topic: Topic) => void;
+  generating?: boolean;
 };
 
-export default function PrevTopicsList({ topics, selectedIndex, onSelect, onUse, onDelete }: Props): JSX.Element {
+export default function PrevTopicsList({ topics, selectedIndex, onSelect, onUse, onDelete, onGenerate, generating }: Props): JSX.Element {
   return (
     <div className="mx-4 w-full max-w-2xl bg-[--background]/95 text-white border border-white/20 rounded-lg shadow-xl p-6 backdrop-blur-sm">
       <h2 className="text-xl font-bold text-center mb-4">Previous topics</h2>
@@ -33,8 +36,11 @@ export default function PrevTopicsList({ topics, selectedIndex, onSelect, onUse,
                       <li key={qi}>{it.question}</li>
                     ))}
                   </ul>
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex gap-2 items-start flex-wrap">
                     <button className="px-4 py-2 rounded-md bg-white/10 border border-white/40 hover:bg-white/20" onClick={() => onUse(t)}>Use this topic</button>
+                    {onGenerate ? (
+                      <GenerateHtmlInlineButton topic={t} className="" onUrl={() => {}} />
+                    ) : null}
                     <button className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10" onClick={() => onDelete(t)}>Delete</button>
                   </div>
                 </div>

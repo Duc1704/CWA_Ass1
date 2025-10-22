@@ -3,6 +3,7 @@ import { TimerOverlay, ControlsBox, HotspotsOverlay, PhaseImage, ModeLanding, To
 import useTimer from "../hooks/useTimer";
 import useEscapeRoomState from "../hooks/useEscapeRoomState";
 import { getTopics, createTopic, deleteTopic } from "../services/customQuestionsClient";
+import { generateGameHTML } from "../services/lambda";
 import { WizardItem, Flow } from "../types/escapeRoom";
 import { PHASE_HOTSPOTS } from "../constants/hotspots";
 
@@ -42,6 +43,8 @@ export default function EscapeRoomTab(): JSX.Element {
   // Saved topics fetched from API when needed
   const [savedTopics, setSavedTopics] = useState<Array<{ title: string; timerSeconds: number; items: { question: string; answer: string; hints: [string, string, string] }[] }>>([]);
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number | null>(null);
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const [generating, setGenerating] = useState<boolean>(false);
 
   useEffect(() => { setRemaining(initialSeconds); }, [initialSeconds, setRemaining]);
 
@@ -261,10 +264,35 @@ export default function EscapeRoomTab(): JSX.Element {
                 <PrevTopicsList
                   topics={savedTopics}
                   selectedIndex={selectedTopicIndex}
-                  onSelect={(idx) => setSelectedTopicIndex((cur) => (cur === idx ? null : idx))}
+                  onSelect={(idx) => { setGeneratedUrl(null); setSelectedTopicIndex((cur) => (cur === idx ? null : idx)); }}
                   onUse={(t) => { const padded = [0,1,2,3].map((i) => t.items[i] ? t.items[i] : { question: "", answer: "", hints: ["", "", ""] as [string,string,string] }); const itemsData = padded.map((it) => ({ question: it.question, hints: it.hints, answer: it.answer })); const secs = Math.max(10, Math.min(3600, Number((t as any).timerSeconds || 300))); setCurrentTopicTitle(t.title); startGameImmediate(itemsData, secs); }}
+                  onGenerate={async (t) => {
+                    try {
+                      setGenerating(true);
+                      setGeneratedUrl(null);
+                      const padded = [0,1,2,3].map((i) => t.items[i] ? t.items[i] : { question: "", answer: "", hints: ["", "", ""] as [string,string,string] });
+                      const itemsData = padded.map((it) => ({ question: it.question, answer: it.answer, hint1: it.hints[0] || "", hint2: it.hints[1] || "", hint3: it.hints[2] || "" }));
+                      const body = { gameId: t.title, title: t.title, timerSeconds: Math.max(10, Math.min(3600, Number((t as any).timerSeconds || 300))), items: itemsData } as any;
+                      const resp = await generateGameHTML({ name: body.title, timeLimit: body.timerSeconds, questions: itemsData }, body.gameId);
+                      const url = (resp && resp.url) ? resp.url : (resp?.data?.url || resp?.body?.url);
+                      if (url) setGeneratedUrl(url);
+                    } catch (e) {
+                      // optional: surface error via toast or state
+                    } finally {
+                      setGenerating(false);
+                    }
+                  }}
                   onDelete={async (t) => { try { await deleteTopic(t.title); setSavedTopics((prev) => prev.filter((x) => x.title !== t.title)); setSelectedTopicIndex(null); } catch {} }}
+                  generating={generating}
                 />
+                {generatedUrl && (
+                  <div className="mt-4 w-full max-w-2xl px-6">
+                    <div className="rounded-md border border-white/30 bg-white/10 p-4 text-white/90 break-words">
+                      <div className="mb-2 font-semibold">Generated link</div>
+                      <a className="underline hover:opacity-90" href={generatedUrl} target="_blank" rel="noopener noreferrer">{generatedUrl}</a>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-6 text-right w-full max-w-2xl px-6">
                   <button onClick={() => setFlow("customEntry")} className="px-4 py-2 rounded-md border border-white/40 hover:bg-white/10">Back</button>
                 </div>
